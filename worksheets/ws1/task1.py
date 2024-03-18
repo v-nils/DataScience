@@ -40,3 +40,53 @@ plt.xlabel('Redshift 0.08 < Z < 0.12')
 plt.xlim(0,0.2)
 plt.ylabel('r-band magnitude')
 plt.show()
+
+#task2
+
+color = u-r
+blue = np.where(color<=2.3)
+red = np.where(color>2.3)
+
+plt.scatter(r[blue],color[blue], s=0.5, alpha=0.1,color='blue',label='Blue galaxies' )
+plt.scatter(r[red],color[red], s=0.5, alpha=0.1,color='red',label='Red galaxies')
+plt.legend(loc='best')
+plt.xlabel('r-band mag')
+plt.ylabel('u-r')
+plt.show()
+
+
+#task3
+
+blue_mean, red_mean = np.mean(r[blue]), np.mean(r[red])
+blue_std, red_std = np.std(r[blue]), np.std(r[red])
+print(blue_mean, red_mean, blue_std, red_std)
+
+
+#task4
+
+fig, axs = plt.subplots(2, 2, figsize=(25,15))
+plt.subplot(2,2,1)
+plt.title('Angular Map for blue galaxies',fontsize=20)
+plt.xlabel('Rektaszenion', fontsize=15)
+plt.ylabel('Declination', fontsize=15)
+plt.scatter(RA[blue], DE[blue], s=0.5, alpha=0.1)
+
+plt.subplot(2,2,2)
+plt.title('Angular Map for red galaxies',fontsize=20)
+plt.xlabel('Rektaszension', fontsize=15)
+plt.ylabel('Declination', fontsize=15)
+plt.scatter(RA[red], DE[red], s=0.5, alpha=0.1)
+
+plt.subplot(2,2,3)
+plt.title('Redshift-space map for blue galaxies',fontsize=20)
+plt.xlabel('RA', fontsize=15)
+plt.ylabel('Redshift', fontsize=15)
+plt.scatter(RA[blue], Z[blue], s=0.5, alpha=0.1)
+
+plt.subplot(2,2,4)
+plt.title('Redshift-space map for red galaxies',fontsize=20)
+plt.xlabel('RA', fontsize=15)
+plt.ylabel('Redshift', fontsize=15)
+plt.scatter(RA[red], Z[red], s=0.5, alpha=0.1)
+
+#fig.tight_layout(pad=30.0)
