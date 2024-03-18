@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import scipy.special as sp
 
 
-d = np.loadtxt('../../data/raw_data/sdss_cutout.csv',dtype='float', skiprows=1,delimiter=',')
+d = np.loadtxt('../data/raw_data/sdss_cutout.csv', dtype='float', skiprows=1, delimiter=',')
 
 print(len(d[:,2]))
 
