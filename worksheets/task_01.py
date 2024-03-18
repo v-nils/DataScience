@@ -18,7 +18,7 @@ sdss.plot_ecdf()
 sdss.plot_rband_redshift()
 
 # Filter
-sdss = sdss.filter_params()
+sdss.filter_params()
 
 # Plot
 sdss.plot_rband_redshift(xlim=(0, 0.2))
