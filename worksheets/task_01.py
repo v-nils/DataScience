@@ -14,8 +14,8 @@ sdss = SDSS(pd.read_csv('../data/raw_data/sdss_cutout.csv'))
 
 
 # Plot
-#sdss.plot_ecdf()
-#sdss.plot_rband_redshift()
+sdss.plot_ecdf()
+sdss.plot_rband_redshift()
 
 # Filter
 sdss = sdss.filter_params()
@@ -54,3 +54,4 @@ sdss.plot_maps()
 ########################################
 # TASK 5
 ########################################
+
