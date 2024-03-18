@@ -91,19 +91,16 @@ class SDSS:
         plt.scatter(self.ra[self.red.index], self.z_redshift[self.red.index], s=0.5, alpha=0.1)
 
         plt.show()
-        
-            @jit(nopython=True)
-    def angles(self):
-        result = np.zeros((len(self.phi)-1, len(self.theta)-1))
-        k = 0
-        for i in range(len(self.phi)-1):
-            for j in range(len(self.theta)-1):
-                M = np.arccos(np.cos(self.theta[j])*np.cos(self.theta[j+1]) + np.cos(self.phi[i]-self.phi[i+1])*np.sin(self.theta[j])*np.sin(self.theta[j+1]))
-                result[i, j] = M
-                k += 1
-                if k % 1000000 == 0:
-                    print(k)
-        return result.flatten()
+
+    def realisation(M):
+        random_ra = np.random.uniform(130, 230, size=M)
+        random_de = np.random.uniform(5, 65, size=M)
+        return np.column_stack((random_ra, random_de))
+
+
+
+
+
 
 
 if __name__ == "__main__":
