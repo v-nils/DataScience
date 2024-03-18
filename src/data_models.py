@@ -29,11 +29,16 @@ class SDSS:
         self.std_red = np.std(self.r[self.red.index])
         self.std_blue = np.std(self.r[self.blue.index])
 
+        # Coordinates
+        self.phi = np.pi * self.ra / 180
+        self.theta = np.pi / 2 - np.pi * self.de / 180
+
+
+
 
     def filter_params(self):
-        filtered_data = self.data.iloc[self.indices.index, :]
-        filtered_sdss = SDSS(filtered_data)
-        return filtered_sdss
+        filtered_data = self.indices
+        return filtered_data
 
 
     def plot_ecdf(self, **kwargs) -> None:
@@ -61,7 +66,6 @@ class SDSS:
         plt.show()
 
     def plot_maps(self, **kwargs):
-        fig, axs = plt.subplots(2, 2, figsize=(25, 15))
         plt.subplot(2, 2, 1)
         plt.title('Angular Map for blue galaxies', fontsize=20)
         plt.xlabel('Rektaszenion', fontsize=15)
@@ -87,10 +91,8 @@ class SDSS:
         plt.scatter(self.ra[self.red.index], self.z_redshift[self.red.index], s=0.5, alpha=0.1)
 
         plt.show()
-
-
-
-    @jit(nopython=True)
+        
+            @jit(nopython=True)
     def angles(self):
         result = np.zeros((len(self.phi)-1, len(self.theta)-1))
         k = 0
@@ -102,3 +104,11 @@ class SDSS:
                 if k % 1000000 == 0:
                     print(k)
         return result.flatten()
+
+
+if __name__ == "__main__":
+    sdss = SDSS(pd.read_csv('../data/raw_data/sdss_cutout.csv'))
+
+    print(len(sdss.data))
+
+
