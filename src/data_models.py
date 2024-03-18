@@ -34,13 +34,12 @@ class SDSS:
         self.phi = np.pi * self.ra / 180
         self.theta = np.pi / 2 - np.pi * self.de / 180
 
-
-
+    def sample_down(self, n: int) -> None:
+        sampled_data = self.data.sample(n, random_state=42)
+        self.__init__(sampled_data)
 
     def filter_params(self):
-        filtered_data = self.indices
-        return SDSS(filtered_data)
-
+        self.__init__(self.indices)
 
     def plot_ecdf(self, **kwargs) -> None:
         s_o = np.sort(self.z_redshift)
@@ -93,21 +92,43 @@ class SDSS:
 
         plt.show()
 
-    def realisation(M):
+    def generate_random_positions(self):
+        M = len(self.data)
         random_ra = np.random.uniform(130, 230, size=M)
         random_de = np.random.uniform(5, 65, size=M)
-        return np.column_stack((random_ra, random_de))
-
-
-
-
-
+        return random_ra, random_de
 
 
 if __name__ == "__main__":
-    sdss = SDSS(pd.read_csv('../data/raw_data/sdss_cutout.csv')).filter_params()
-    m = angles(sdss.theta, sdss.phi)
 
-    print(len(sdss.data))
+    sample_size = 1_000
+
+    sdss = SDSS(pd.read_csv('../data/raw_data/sdss_cutout.csv'))
+    sdss.filter_params()
+
+    sdss.sample_down(sample_size)
+
+    # Data positions in angular size
+    data_positions = angles(sdss.theta.to_numpy(), sdss.phi.to_numpy())
+
+    # Random positions of size data_positions in RA and DEC
+    random_positions = angles(*sdss.generate_random_positions())
+    print(random_positions)
+
+    omega = np.geomspace(0.003, 0.3, 11)
+
+    dd_counts, _ = np.histogram(data_positions, bins=omega)
+    rr_counts, _ = np.histogram(random_positions, bins=omega)
+
+    dr_angles = angles(np.sort(data_positions), np.sort(random_positions))
+
+    print(dr_angles)
+
+
+    fig, ax = plt.subplots(1,1,figsize=(8,8))
+
+    ax.plot(np.arange(0,10,1), dd_counts)
+    plt.show()
+
 
 
