@@ -1,6 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+from numba import jit
 
 
 class SDSS:
@@ -90,9 +91,24 @@ class SDSS:
         plt.scatter(self.ra[self.red.index], self.z_redshift[self.red.index], s=0.5, alpha=0.1)
 
         plt.show()
+        
+            @jit(nopython=True)
+    def angles(self):
+        result = np.zeros((len(self.phi)-1, len(self.theta)-1))
+        k = 0
+        for i in range(len(self.phi)-1):
+            for j in range(len(self.theta)-1):
+                M = np.arccos(np.cos(self.theta[j])*np.cos(self.theta[j+1]) + np.cos(self.phi[i]-self.phi[i+1])*np.sin(self.theta[j])*np.sin(self.theta[j+1]))
+                result[i, j] = M
+                k += 1
+                if k % 1000000 == 0:
+                    print(k)
+        return result.flatten()
 
 
 if __name__ == "__main__":
     sdss = SDSS(pd.read_csv('../data/raw_data/sdss_cutout.csv'))
 
     print(len(sdss.data))
+
+
