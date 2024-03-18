@@ -1,6 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+from src.correlation_functions import angles
 from numba import jit
 
 
@@ -38,7 +39,7 @@ class SDSS:
 
     def filter_params(self):
         filtered_data = self.indices
-        return filtered_data
+        return SDSS(filtered_data)
 
 
     def plot_ecdf(self, **kwargs) -> None:
@@ -104,7 +105,8 @@ class SDSS:
 
 
 if __name__ == "__main__":
-    sdss = SDSS(pd.read_csv('../data/raw_data/sdss_cutout.csv'))
+    sdss = SDSS(pd.read_csv('../data/raw_data/sdss_cutout.csv')).filter_params()
+    m = angles(sdss.theta, sdss.phi)
 
     print(len(sdss.data))
 
