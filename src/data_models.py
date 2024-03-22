@@ -4,32 +4,91 @@ import numpy as np
 from src.correlation_functions import compute_angles, landy_szalay
 import seaborn as sns
 from numba import jit
+from scipy import stats
+import os
+import scienceplots
 
 
-def _plot_correlation_fun(omega, correlation_red, correlation_blue):
-    fig, ax = plt.subplots(1, 2, figsize=(15, 5))
+plt.style.use(['science', 'ieee'])
 
-    # Find the minimum and maximum values across both arrays
-    min_val = min(correlation_red.min(), correlation_blue.min())
-    max_val = max(correlation_red.max(), correlation_blue.max())
+def _statistics(data: np.array, alpha: float = 0.95) -> dict[str, np.array]:
+    results_avg, results_var, results_std = [], [], []
 
-    ax[0].plot(omega[:-1], correlation_red, label='Red galaxies')
+    for current_bin in data:
+        avg, var, std = stats.bayes_mvs(current_bin, alpha=alpha)
+        results_avg.append(avg)
+        results_var.append(var)
+        results_std.append(std)
+
+    return {'mean': results_avg, 'var': results_var, 'std': results_std}
+
+
+def _plot_correlation_fun(omega: np.array,
+                          params_red: dict[str, np.array],
+                          params_blue: dict[str, np.array],
+                          plot_params: list | None = None,
+                          plot_conf_interval: bool = True,
+                          **kwargs) -> None:
+
+    if plot_params is None:
+        plot_params = ['mean']
+    fig, ax = plt.subplots(1, 2, figsize=(15, 6))
+    plt.subplots_adjust(wspace=0.3)
+
+    assert ('mean' in plot_params and plot_conf_interval is True) or plot_conf_interval is False
+
+    if plot_conf_interval:
+        ax[0].fill_between(omega[:-1], [i.minmax[0] for i in params_red['mean']],
+                           [i.minmax[1] for i in params_red['mean']], edgecolor='black', facecolor='white',
+                           alpha=0.6, ls='--', label=r'\( z_{0.95} \)', hatch=r'\\\\', zorder=1)
+
+        ax[1].fill_between(omega[:-1], [i.minmax[0] for i in params_blue['mean']],
+                           [i.minmax[1] for i in params_blue['mean']], edgecolor='black', facecolor='white',
+                           alpha=0.6, ls='--', label=r'\( z_{0.95} \)', hatch=r'\\\\', zorder=1)
+
+    for param in plot_params:
+        ax[0].plot(omega[:-1], [i.statistic for i in params_red[param]], label=r'\( \mu_{red} \)', ls='-.', lw=2, zorder=2, marker='^', markersize=10)
+        ax[1].plot(omega[:-1], [i.statistic for i in params_blue[param]], label=r'\( \mu_{blue} \)', ls='-.', lw=2, zorder=2, marker='^', markersize=10)
+
+    x_min = min(omega)
+    x_max = max(omega)
+    y_min = min([i.minmax[0] for i in params_red['mean'] + params_blue['mean']])
+    y_max = max([i.minmax[1] for i in params_red['mean'] + params_blue['mean']])
+
     ax[0].set_xscale('log')
     ax[0].set_yscale('log')
-    ax[0].set_xlabel(r'$\omega$')
-    ax[0].set_ylabel(r'$\xi(\omega)$')
-    ax[0].legend()
-    ax[0].set_title('Red galaxies')
-    ax[0].set_ylim([min_val, max_val])  # Set y-axis limits
+    ax[0].set_xlabel(r'$\omega$', fontsize=24)
+    ax[0].set_ylabel(r'$\xi(\omega)$', fontsize=24)
+    ax[0].legend(fontsize=15)
+    ax[0].tick_params(axis='both', which='major', labelsize=15, size=10, width=2,
+                      bottom=True, top=False, left=True, right=False)
+    ax[0].tick_params(axis='both', which='minor', labelsize=15, size=6.35, width=1.25,
+                      bottom=True, top=False, left=True, right=False, labelbottom=False, labelleft=True)
 
-    ax[1].plot(omega[:-1], correlation_blue, label='Blue galaxies')
     ax[1].set_xscale('log')
     ax[1].set_yscale('log')
-    ax[1].set_xlabel(r'$\omega$')
-    ax[1].set_ylabel(r'$\xi(\omega)$')
-    ax[1].legend()
-    ax[1].set_title('Blue galaxies')
-    ax[1].set_ylim([min_val, max_val])  # Set y-axis limits
+    ax[1].set_xlabel(r'$\omega$', fontsize=24)
+    ax[1].set_ylabel(r'$\xi(\omega)$', fontsize=24)
+    ax[1].legend(fontsize=15)
+    ax[1].tick_params(axis='both', which='major', labelsize=15, size=10, width=2,
+                      bottom=True, top=False, left=True, right=False)
+    ax[1].tick_params(axis='both', which='minor', labelsize=15, size=6.35, width=1.25,
+                      bottom=True, top=False, left=True, right=False, labelbottom=False, labelleft=True)
+
+    ax[0].set_xlim([x_min, x_max * 0.85])
+    ax[0].set_ylim([y_min * 0.9, y_max * 1.1])
+
+    # Set the x and y limits for the second plot
+    ax[1].set_xlim([x_min, x_max * 0.85])
+    ax[1].set_ylim([y_min * 0.9, y_max * 1.1])
+
+    save_path = kwargs.get('save_path', None)
+    if save_path is not None:
+        if not os.path.exists(save_path):
+            raise FileNotFoundError(f"Path {save_path} does not exist")
+
+        print('Save figure to:', save_path)
+        plt.savefig(save_path, bbox_inches='tight')
 
     plt.show()
 
@@ -149,7 +208,6 @@ class SDSS:
 
         self._generate_random_positions(m=m)
 
-
         indices_blue = np.random.choice(np.arange(len(self.theta[self.blue_idx])), m)
         subsample_theta_blue = self.theta[self.blue_idx].to_numpy()[indices_blue]
         subsample_phi_blue = self.phi[self.blue_idx].to_numpy()[indices_blue]
@@ -165,12 +223,12 @@ class SDSS:
         data_positions_blue = compute_angles(subsample_theta_blue, subsample_phi_blue)
 
         data_random_positions_red = compute_angles(subsample_theta_red, subsample_phi_red,
-                                                  self.random_theta,
-                                                  self.random_phi)
-
-        data_random_positions_blue = compute_angles(subsample_theta_blue, subsample_phi_blue,
                                                    self.random_theta,
                                                    self.random_phi)
+
+        data_random_positions_blue = compute_angles(subsample_theta_blue, subsample_phi_blue,
+                                                    self.random_theta,
+                                                    self.random_phi)
 
         # Define the bins for the histogram
         omega = np.geomspace(0.003, 0.3, 11)
@@ -212,7 +270,7 @@ class SDSS:
         results_blue = []
 
         for i in range(iterations):
-            print(f"iteration {i+1}/{iterations}")
+            print(f"iteration {i + 1}/{iterations}")
             c_blue, c_red = self._two_point_correlation(m=m_samples, plot=False)
             results_blue.append(c_blue)
             results_red.append(c_red)
@@ -220,33 +278,24 @@ class SDSS:
         results_blue = np.array(results_blue)
         results_red = np.array(results_red)
 
-        mean_blue = np.mean(results_blue, axis=0)
-        mean_red = np.mean(results_red, axis=0)
 
-        std_blue = np.std(results_blue, axis=0)
-        std_red = np.std(results_red, axis=0)
+        self.correlation_results_blue = _statistics(results_blue.T)
+        self.correlation_results_red = _statistics(results_red.T)
 
-        var_blue = np.var(results_blue, axis=0)
-        var_red = np.var(results_red, axis=0)
-
-        self.correlation_results_blue = {'mean': mean_blue, 'std': std_blue, 'var': var_blue}
-        self.correlation_results_red = {'mean': mean_red, 'std': std_red, 'var': var_red}
-
-        if kwargs.get('plot', True):
+        if kwargs.get('plot', False):
             self.plot_correlation()
 
-
-    def plot_correlation(self):
+    def plot_correlation(self, **kwargs) -> None:
         if self.correlation_results_red is not None and self.correlation_results_blue is not None:
             omega = np.geomspace(0.003, 0.3, 11)
-            _plot_correlation_fun(omega, self.correlation_results_red['mean'], self.correlation_results_blue['mean'])
+            _plot_correlation_fun(omega, self.correlation_results_red, self.correlation_results_blue, **kwargs)
         else:
             raise ValueError("Two-point correlation function has not been computed yet")
 
 
 if __name__ == "__main__":
     # Set the sample size
-    #sample_size = 100_000
+    # sample_size = 100_000
 
     # Initialize the SDSS class with data from the CSV file
     sdss = SDSS(pd.read_csv('../data/raw_data/sdss_cutout.csv'))
@@ -255,18 +304,11 @@ if __name__ == "__main__":
     sdss.filter_params()
 
     # Downsample the data to the specified sample size
-    #sdss.sample_down(sample_size)
+    # sdss.sample_down(sample_size)
 
-    sdss.two_point_correlation(1000, 250)
-
-    sdss.plot_correlation()
+    sdss.two_point_correlation(500, 50)
 
 
-
-
-
-
-
-
-
+    sdss.plot_correlation(plot_params=['mean'],
+                          save_path=f'/Users/nilsvoss/Documents/DataScience/data/results.pdf')
 
