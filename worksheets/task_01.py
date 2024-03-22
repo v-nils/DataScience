@@ -55,3 +55,10 @@ sdss.plot_maps()
 # TASK 5
 ########################################
 
+# Initialize the SDSS class with data from the CSV file
+sdss = SDSS(pd.read_csv('../data/raw_data/sdss_cutout.csv'))
+
+# Filter the data based on the parameters defined in the filter_params method
+sdss.filter_params()
+sdss.two_point_correlation(1000, 250, plot=True)
+
