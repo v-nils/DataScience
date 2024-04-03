@@ -306,9 +306,9 @@ if __name__ == "__main__":
     # Downsample the data to the specified sample size
     # sdss.sample_down(sample_size)
 
-    sdss.two_point_correlation(500, 50)
+    sdss.two_point_correlation(500, 100)
 
 
     sdss.plot_correlation(plot_params=['mean'],
-                          save_path=f'/Users/nilsvoss/Documents/DataScience/data/results.pdf')
+                          save_path=f'/Users/nilsvoss/Documents/DataScience/data/results')
 
