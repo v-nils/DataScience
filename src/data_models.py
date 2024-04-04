@@ -7,11 +7,23 @@ from numba import jit
 from scipy import stats
 import os
 import scienceplots
+import matplotlib.ticker as ticker
+import matplotlib
 
 
-plt.style.use(['science', 'ieee'])
+# Global settings
+# plt.style.use(['science', 'ieee', 'no-latex'])
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
+
 
 def _statistics(data: np.array, alpha: float = 0.95) -> dict[str, np.array]:
+    """
+    Utility function to calculate statistic parameters of the
+    :param data:
+    :param alpha:
+    :return:
+    """
     results_avg, results_var, results_std = [], [], []
 
     for current_bin in data:
@@ -30,8 +42,10 @@ def _plot_correlation_fun(omega: np.array,
                           plot_conf_interval: bool = True,
                           **kwargs) -> None:
 
+    plt.style.use(['science', 'ieee', 'no-latex'])
+
     if plot_params is None:
-        plot_params = ['mean']
+        plot_params: list = ['mean']
     fig, ax = plt.subplots(1, 2, figsize=(15, 6))
     plt.subplots_adjust(wspace=0.3)
 
@@ -47,33 +61,35 @@ def _plot_correlation_fun(omega: np.array,
                            alpha=0.6, ls='--', label=r'\( z_{0.95} \)', hatch=r'\\\\', zorder=1)
 
     for param in plot_params:
-        ax[0].plot(omega[:-1], [i.statistic for i in params_red[param]], label=r'\( \mu_{red} \)', ls='-.', lw=2, zorder=2, marker='^', markersize=10)
-        ax[1].plot(omega[:-1], [i.statistic for i in params_blue[param]], label=r'\( \mu_{blue} \)', ls='-.', lw=2, zorder=2, marker='^', markersize=10)
+        ax[0].plot(omega[:-1], [i.statistic for i in params_red[param]],
+                   label=r'\( \mu_{red} \)', ls='-.', lw=2, zorder=2, marker='^', markersize=10)
+        ax[1].plot(omega[:-1], [i.statistic for i in params_blue[param]],
+                   label=r'\( \mu_{blue} \)', ls='-.', lw=2, zorder=2, marker='^', markersize=10)
 
-    x_min = min(omega)
-    x_max = max(omega)
-    y_min = min([i.minmax[0] for i in params_red['mean'] + params_blue['mean']])
-    y_max = max([i.minmax[1] for i in params_red['mean'] + params_blue['mean']])
+    x_min: float = min(omega)
+    x_max: float = max(omega)
+    y_min: float = min([i.minmax[0] for i in params_red['mean'] + params_blue['mean']])
+    y_max: float = max([i.minmax[1] for i in params_red['mean'] + params_blue['mean']])
 
     ax[0].set_xscale('log')
-    ax[0].set_yscale('log')
-    ax[0].set_xlabel(r'$\omega$', fontsize=24)
+    ax[0].set_xlabel(r'$\omega$ [rad]', fontsize=24)
     ax[0].set_ylabel(r'$\xi(\omega)$', fontsize=24)
     ax[0].legend(fontsize=15)
+    ax[0].yaxis.set_major_formatter(ticker.StrMethodFormatter("{x:.2f}"))
     ax[0].tick_params(axis='both', which='major', labelsize=15, size=10, width=2,
                       bottom=True, top=False, left=True, right=False)
     ax[0].tick_params(axis='both', which='minor', labelsize=15, size=6.35, width=1.25,
-                      bottom=True, top=False, left=True, right=False, labelbottom=False, labelleft=True)
+                      bottom=True, top=False, left=False, right=False, labelbottom=False, labelleft=True)
 
     ax[1].set_xscale('log')
-    ax[1].set_yscale('log')
-    ax[1].set_xlabel(r'$\omega$', fontsize=24)
+    ax[1].set_xlabel(r'$\omega$ [rad]', fontsize=24)
     ax[1].set_ylabel(r'$\xi(\omega)$', fontsize=24)
     ax[1].legend(fontsize=15)
+    ax[1].yaxis.set_major_formatter(ticker.StrMethodFormatter("{x:.2f}"))
     ax[1].tick_params(axis='both', which='major', labelsize=15, size=10, width=2,
                       bottom=True, top=False, left=True, right=False)
     ax[1].tick_params(axis='both', which='minor', labelsize=15, size=6.35, width=1.25,
-                      bottom=True, top=False, left=True, right=False, labelbottom=False, labelleft=True)
+                      bottom=True, top=False, left=False, right=False, labelbottom=False, labelleft=True)
 
     ax[0].set_xlim([x_min, x_max * 0.85])
     ax[0].set_ylim([y_min * 0.9, y_max * 1.1])
@@ -82,9 +98,10 @@ def _plot_correlation_fun(omega: np.array,
     ax[1].set_xlim([x_min, x_max * 0.85])
     ax[1].set_ylim([y_min * 0.9, y_max * 1.1])
 
-    save_path = kwargs.get('save_path', None)
+    save_path: str | None = kwargs.get('save_path', None)
+
     if save_path is not None:
-        if not os.path.exists(save_path):
+        if not os.path.exists(os.path.dirname(save_path)):
             raise FileNotFoundError(f"Path {save_path} does not exist")
 
         print('Save figure to:', save_path)
@@ -94,11 +111,21 @@ def _plot_correlation_fun(omega: np.array,
 
 
 class SDSS:
+    """
+    Class for the Sloan Digital Sky Survey (SDSS) data.
+    The class provides methods to filter, plot, manipulate and analyze the data.
+    """
 
     def __init__(self, data: pd.DataFrame) -> None:
+        """
+        Initialize the SDSS class with the data from the CSV file.
+        :param data: (Pandas DataFrame) Data from the CSV file (ra, de, z_redshift, u, g, r, i, z_magnitude
+        """
 
         # SDSS as Pandas Dataframe
-        self.data = data
+        self.data: pd.DataFrame = data
+
+        # SDSS Parameter extracted
         self.ra = data.iloc[:, 0]
         self.de = data.iloc[:, 1]
         self.z_redshift = data.iloc[:, 2]
@@ -112,12 +139,13 @@ class SDSS:
         self.blue = self.color[self.color <= 2.3]
         self.red = self.color[self.color > 2.3]
 
+        # Indices and number of red and blue galaxies
         self.blue_idx = self.color <= 2.3
         self.red_idx = self.color > 2.3
         self.num_red = len(self.red_idx[self.red_idx == True])
         self.num_blue = len(self.blue_idx[self.blue_idx == True])
 
-        # Statistic parameters
+        # Statistic parameters for red and blue galaxies
         self.mean_red = np.mean(self.r[self.red_idx])
         self.mean_blue = np.mean(self.r[self.blue_idx])
         self.std_red = np.std(self.r[self.red_idx])
@@ -144,55 +172,102 @@ class SDSS:
         self.__init__(self.indices)
 
     def plot_ecdf(self, **kwargs) -> None:
-        s_o = np.sort(self.z_redshift)
-        fig = plt.figure()
-        plt.step(s_o, np.arange(len(s_o)) / len(s_o), label='empirical CDF')
-        plt.xlabel('Redshift')
-        plt.ylabel('eCDF')
-        plt.legend(loc='best')
-        plt.show()
 
-    def plot_rband_redshift(self, xlim=(0, 0.6), **kwargs):
-        plt.scatter(self.z_redshift, self.r, s=0.5, alpha=0.1)
-        plt.xlabel('Redshift')
-        plt.xlim(*xlim)
-        plt.ylabel('r-band magnitude')
-        plt.show()
+        plt.style.use(['science', 'ieee', 'no-latex'])
+
+        s_o = np.sort(self.z_redshift)
+        fig, ax = plt.subplots(1, 1)
+        ax.step(s_o, np.arange(len(s_o)) / len(s_o), label='empirical CDF')
+        ax.set_xlabel('Redshift')
+        ax.set_ylabel('eCDF')
+        ax.legend(loc='best')
+        ax.eventplot(s_o, lineoffsets=-0.1, linelengths=0.05, lw=0.1, colors='k')
+        ax.legend(bbox_to_anchor=(0.57, 1.13), loc='upper left')
+        save_path: str | None = kwargs.get('save_path', None)
+
+        if save_path is not None:
+            if not os.path.exists(os.path.dirname(save_path)):
+                raise FileNotFoundError(f"Path {save_path} does not exist")
+
+            print('Save figure to:', save_path)
+            plt.savefig(save_path, bbox_inches='tight')
+        else:
+            plt.show()
+
+    def plot_rband_redshift(self, xlim: tuple = (0, 0.6), **kwargs):
+
+        plt.style.use(['science', 'ieee', 'scatter', 'no-latex'])
+        fig, ax = plt.subplots(1, 1)
+        ax.scatter(self.z_redshift, self.r, s=0.5, alpha=0.1)
+        ax.set_xlabel('Redshift')
+        ax.set_xlim(*xlim)
+        ax.set_ylabel('r-band magnitude')
+        rs_save_path: str | None = kwargs.get('save_path', None)
+
+        if rs_save_path is not None:
+            if not os.path.exists(os.path.dirname(rs_save_path)):
+                raise FileNotFoundError(f"Path {rs_save_path} does not exist")
+
+            print('Save figure to:', rs_save_path)
+            plt.savefig(rs_save_path, bbox_inches='tight')
+        else:
+            plt.show()
 
     def plot_colors(self, **kwargs):
-        plt.scatter(self.r[self.blue.index], self.blue, s=0.5, alpha=0.1, color='blue', label='Blue galaxies')
-        plt.scatter(self.r[self.red.index], self.red, s=0.5, alpha=0.1, color='red', label='Red galaxies')
-        plt.legend(loc='best')
-        plt.xlabel('r-band mag')
-        plt.ylabel('u-r')
-        plt.show()
+
+        plt.style.use(['science', 'ieee', 'scatter', 'no-latex'])
+        fig, ax = plt.subplots(1, 1)
+        ax.scatter(self.r[self.blue.index], self.blue, s=0.15, color='blue', label='Blue galaxies')
+        ax.scatter(self.r[self.red.index], self.red, s=0.15, color='red', label='Red galaxies')
+        ax.legend(loc='best')
+        ax.set_xlabel('r-band mag')
+        ax.set_ylabel('u-r')
+
+        cl_save_path: str | None = kwargs.get('save_path', None)
+
+        if cl_save_path is not None:
+            if not os.path.exists(os.path.dirname(cl_save_path)):
+                raise FileNotFoundError(f"Path {cl_save_path} does not exist")
+
+            print('Save figure to:', cl_save_path)
+            plt.savefig(cl_save_path, bbox_inches='tight')
+        else:
+            plt.show()
 
     def plot_maps(self, **kwargs):
-        plt.subplot(2, 2, 1)
-        plt.title('Angular Map for blue galaxies', fontsize=20)
-        plt.xlabel('Rektaszenion', fontsize=15)
-        plt.ylabel('Declination', fontsize=15)
-        plt.scatter(self.ra[self.blue.index], self.de[self.blue.index], s=0.5, alpha=0.1)
 
-        plt.subplot(2, 2, 2)
-        plt.title('Angular Map for red galaxies', fontsize=20)
-        plt.xlabel('Rektaszension', fontsize=15)
-        plt.ylabel('Declination', fontsize=15)
-        plt.scatter(self.ra[self.red.index], self.de[self.red.index], s=0.5, alpha=0.1)
+        plt.style.use(['science', 'ieee', 'scatter', 'no-latex'])
+        fig, ax = plt.subplots(2, 2, figsize=(15, 15))
+        ax[0, 0].set_title('Angular Map for blue galaxies', fontsize=20)
+        ax[0, 0].set_xlabel('Rektaszension', fontsize=15)
+        ax[0, 0].set_ylabel('Declination', fontsize=15)
+        ax[0, 0].scatter(self.ra[self.blue.index], self.de[self.blue.index], s=0.5, alpha=0.2, color='blue')
 
-        plt.subplot(2, 2, 3)
-        plt.title('Redshift-space map for blue galaxies', fontsize=20)
-        plt.xlabel('RA', fontsize=15)
-        plt.ylabel('Redshift', fontsize=15)
-        plt.scatter(self.ra[self.blue.index], self.z_redshift[self.blue.index], s=0.5, alpha=0.1)
+        ax[0, 1].set_title('Angular Map for red galaxies', fontsize=20)
+        ax[0, 1].set_xlabel('Rektaszension', fontsize=15)
+        ax[0, 1].set_ylabel('Declination', fontsize=15)
+        ax[0, 1].scatter(self.ra[self.red.index], self.de[self.red.index], s=0.5, alpha=0.2, color='red')
 
-        plt.subplot(2, 2, 4)
-        plt.title('Redshift-space map for red galaxies', fontsize=20)
-        plt.xlabel('RA', fontsize=15)
-        plt.ylabel('Redshift', fontsize=15)
-        plt.scatter(self.ra[self.red.index], self.z_redshift[self.red.index], s=0.5, alpha=0.1)
+        ax[1, 0].set_title('Redshift-space map for blue galaxies', fontsize=20)
+        ax[1, 0].set_xlabel('RA', fontsize=15)
+        ax[1, 0].set_ylabel('Redshift', fontsize=15)
+        ax[1, 0].scatter(self.ra[self.blue.index], self.z_redshift[self.blue.index], s=0.5, alpha=0.2, color='blue')
 
-        plt.show()
+        ax[1, 1].set_title('Redshift-space map for red galaxies', fontsize=20)
+        ax[1, 1].set_xlabel('RA', fontsize=15)
+        ax[1, 1].set_ylabel('Redshift', fontsize=15)
+        ax[1, 1].scatter(self.ra[self.red.index], self.z_redshift[self.red.index], s=0.5, alpha=0.2, color='red')
+
+        save_path: str | None = kwargs.get('save_path', None)
+
+        if save_path is not None:
+            if not os.path.exists(os.path.dirname(save_path)):
+                raise FileNotFoundError(f"Path {save_path} does not exist")
+
+            print('Save figure to:', save_path)
+            plt.savefig(save_path, bbox_inches='tight')
+        else:
+            plt.show()
 
     def _generate_random_positions(self, m: int | None = None) -> None:
 
@@ -233,28 +308,20 @@ class SDSS:
         # Define the bins for the histogram
         omega = np.geomspace(0.003, 0.3, 11)
 
-        # Compute the histogram for the red galaxies using the actual positions
+        # Compute the histogram using the actual positions
         dd_counts_red, _ = np.histogram(data_positions_red, bins=omega)
-
-        # Compute the histogram for the blue galaxies using the actual positions
         dd_counts_blue, _ = np.histogram(data_positions_blue, bins=omega)
 
-        # Compute the histogram for the red galaxies using the random positions
+        # Compute the histogram using random positions
         rr_counts_red, _ = np.histogram(random_positions_red, bins=omega)
-
-        # Compute the histogram for the blue galaxies using the random positions
         rr_counts_blue, _ = np.histogram(random_positions_blue, bins=omega)
 
-        # Compute the histogram for the red galaxies using a mix of actual and random positions
+        # Compute the histogram using actual and random positions
         dr_counts_red, _ = np.histogram(data_random_positions_red, bins=omega)
-
-        # Compute the histogram for the blue galaxies using a mix of actual and random positions
         dr_counts_blue, _ = np.histogram(data_random_positions_blue, bins=omega)
 
-        # Compute the Landy-Szalay estimator for the red galaxies
+        # Compute the Landy-Szalay estimator
         correlation_red = landy_szalay(dd_counts_red, dr_counts_red, rr_counts_red, m)
-
-        # Compute the Landy-Szalay estimator for the blue galaxies
         correlation_blue = landy_szalay(dd_counts_blue, dr_counts_blue, rr_counts_blue, m)
 
         if plot:
@@ -278,7 +345,6 @@ class SDSS:
         results_blue = np.array(results_blue)
         results_red = np.array(results_red)
 
-
         self.correlation_results_blue = _statistics(results_blue.T)
         self.correlation_results_red = _statistics(results_red.T)
 
@@ -295,7 +361,8 @@ class SDSS:
 
 if __name__ == "__main__":
     # Set the sample size
-    # sample_size = 100_000
+    iterations = 5000
+    sample_size = 100
 
     # Initialize the SDSS class with data from the CSV file
     sdss = SDSS(pd.read_csv('../data/raw_data/sdss_cutout.csv'))
@@ -306,9 +373,12 @@ if __name__ == "__main__":
     # Downsample the data to the specified sample size
     # sdss.sample_down(sample_size)
 
-    sdss.two_point_correlation(500, 100)
+    sdss.two_point_correlation(iterations=iterations, m_samples=sample_size)
 
+    f_format = '.png'
+    f_name = 'results_' + str(iterations) + '_' + str(sample_size) + f_format
+    f_path = os.path.join(f'../data/results', f_name)
 
     sdss.plot_correlation(plot_params=['mean'],
-                          save_path=f'/Users/nilsvoss/Documents/DataScience/data/results')
+                          save_path=f_path)
 
