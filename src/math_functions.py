@@ -31,7 +31,6 @@ def compute_angles(theta_1: np.array,
     return omega.flatten()
 
 
-
 def landy_szalay(dd: np.array, dr: np.array, rr: np.array, n: int) -> np.array:
 
     m = n
