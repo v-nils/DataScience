@@ -1,7 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-from src.correlation_functions import compute_angles, landy_szalay
+from src.math_functions import compute_angles, landy_szalay
 import seaborn as sns
 from numba import jit
 from scipy import stats
@@ -9,6 +9,7 @@ import os
 import scienceplots
 import matplotlib.ticker as ticker
 import matplotlib
+import matplotlib.colors as mcolors
 
 
 # Global settings
@@ -42,7 +43,7 @@ def _plot_correlation_fun(omega: np.array,
                           plot_conf_interval: bool = True,
                           **kwargs) -> None:
 
-    plt.style.use(['science', 'ieee', 'no-latex'])
+    plt.style.use(['science', 'ieee'])
 
     if plot_params is None:
         plot_params: list = ['mean']
@@ -72,6 +73,7 @@ def _plot_correlation_fun(omega: np.array,
     y_max: float = max([i.minmax[1] for i in params_red['mean'] + params_blue['mean']])
 
     ax[0].set_xscale('log')
+    ax[0].set_yscale('log')
     ax[0].set_xlabel(r'$\omega$ [rad]', fontsize=24)
     ax[0].set_ylabel(r'$\xi(\omega)$', fontsize=24)
     ax[0].legend(fontsize=15)
@@ -82,6 +84,7 @@ def _plot_correlation_fun(omega: np.array,
                       bottom=True, top=False, left=False, right=False, labelbottom=False, labelleft=True)
 
     ax[1].set_xscale('log')
+    ax[1].set_yscale('log')
     ax[1].set_xlabel(r'$\omega$ [rad]', fontsize=24)
     ax[1].set_ylabel(r'$\xi(\omega)$', fontsize=24)
     ax[1].legend(fontsize=15)
@@ -198,9 +201,10 @@ class SDSS:
 
         plt.style.use(['science', 'ieee', 'scatter', 'no-latex'])
         fig, ax = plt.subplots(1, 1)
-        ax.scatter(self.z_redshift, self.r, s=0.5, alpha=0.1)
+        ax.scatter(self.z_redshift, self.r, marker='.', s=1.5, alpha=0.1, c='black', lw=0.0)
         ax.set_xlabel('Redshift')
         ax.set_xlim(*xlim)
+        ax.set_ylim(12, 18)
         ax.set_ylabel('r-band magnitude')
         rs_save_path: str | None = kwargs.get('save_path', None)
 
@@ -209,7 +213,7 @@ class SDSS:
                 raise FileNotFoundError(f"Path {rs_save_path} does not exist")
 
             print('Save figure to:', rs_save_path)
-            plt.savefig(rs_save_path, bbox_inches='tight')
+            plt.savefig(rs_save_path, bbox_inches='tight', dpi=900)
         else:
             plt.show()
 
@@ -217,9 +221,10 @@ class SDSS:
 
         plt.style.use(['science', 'ieee', 'scatter', 'no-latex'])
         fig, ax = plt.subplots(1, 1)
-        ax.scatter(self.r[self.blue.index], self.blue, s=0.15, color='blue', label='Blue galaxies')
-        ax.scatter(self.r[self.red.index], self.red, s=0.15, color='red', label='Red galaxies')
-        ax.legend(loc='best')
+
+        ax.scatter(self.r[self.blue.index], self.blue, s=1.5, alpha=0.15, color='darkblue', label='Blue galaxies', lw=0.1)
+        ax.scatter(self.r[self.red.index], self.red, s=1.5, alpha=0.15, color='darkred', label='Red galaxies', lw=0.1)
+        #ax.legend(loc='best')
         ax.set_xlabel('r-band mag')
         ax.set_ylabel('u-r')
 
@@ -239,24 +244,24 @@ class SDSS:
         plt.style.use(['science', 'ieee', 'scatter', 'no-latex'])
         fig, ax = plt.subplots(2, 2, figsize=(15, 15))
         ax[0, 0].set_title('Angular Map for blue galaxies', fontsize=20)
-        ax[0, 0].set_xlabel('Rektaszension', fontsize=15)
-        ax[0, 0].set_ylabel('Declination', fontsize=15)
-        ax[0, 0].scatter(self.ra[self.blue.index], self.de[self.blue.index], s=0.5, alpha=0.2, color='blue')
+        ax[0, 0].set_xlabel('RA [deg]', fontsize=15)
+        ax[0, 0].set_ylabel('DEC [deg]', fontsize=15)
+        ax[0, 0].scatter(self.ra[self.blue.index], self.de[self.blue.index], s=0.6, alpha=0.15, color='darkblue')
 
         ax[0, 1].set_title('Angular Map for red galaxies', fontsize=20)
-        ax[0, 1].set_xlabel('Rektaszension', fontsize=15)
-        ax[0, 1].set_ylabel('Declination', fontsize=15)
-        ax[0, 1].scatter(self.ra[self.red.index], self.de[self.red.index], s=0.5, alpha=0.2, color='red')
+        ax[0, 1].set_xlabel('RA [deg]', fontsize=15)
+        ax[0, 1].set_ylabel('DEC [deg]', fontsize=15)
+        ax[0, 1].scatter(self.ra[self.red.index], self.de[self.red.index], s=0.6, alpha=0.15, color='darkred')
 
         ax[1, 0].set_title('Redshift-space map for blue galaxies', fontsize=20)
-        ax[1, 0].set_xlabel('RA', fontsize=15)
-        ax[1, 0].set_ylabel('Redshift', fontsize=15)
-        ax[1, 0].scatter(self.ra[self.blue.index], self.z_redshift[self.blue.index], s=0.5, alpha=0.2, color='blue')
+        ax[1, 0].set_xlabel('RA [deg]', fontsize=15)
+        ax[1, 0].set_ylabel('Redshift [-]', fontsize=15)
+        ax[1, 0].scatter(self.ra[self.blue.index], self.z_redshift[self.blue.index], s=0.6, alpha=0.15, color='darkblue')
 
         ax[1, 1].set_title('Redshift-space map for red galaxies', fontsize=20)
-        ax[1, 1].set_xlabel('RA', fontsize=15)
-        ax[1, 1].set_ylabel('Redshift', fontsize=15)
-        ax[1, 1].scatter(self.ra[self.red.index], self.z_redshift[self.red.index], s=0.5, alpha=0.2, color='red')
+        ax[1, 1].set_xlabel('RA [deg]', fontsize=15)
+        ax[1, 1].set_ylabel('Redshift [-]', fontsize=15)
+        ax[1, 1].scatter(self.ra[self.red.index], self.z_redshift[self.red.index], s=0.6, alpha=0.15, color='darkred')
 
         save_path: str | None = kwargs.get('save_path', None)
 
@@ -349,6 +354,11 @@ class SDSS:
         self.correlation_results_red = _statistics(results_red.T)
 
         if kwargs.get('plot', False):
+
+            if kwargs.get('save_path', False):
+                self.plot_correlation(save_path=kwargs.get('save_path'))
+                return
+
             self.plot_correlation()
 
     def plot_correlation(self, **kwargs) -> None:

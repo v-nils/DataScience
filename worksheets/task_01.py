@@ -9,7 +9,8 @@ from src.data_models import SDSS
 # GLOBAL VARIABLES
 ########################################
 
-tasks = [4]
+# Here we define the tasks that we want to run
+tasks = [5]
 
 # Load SDSS as class
 sdss = SDSS(pd.read_csv('../data/raw_data/sdss_cutout.csv'))
@@ -21,18 +22,20 @@ sdss = SDSS(pd.read_csv('../data/raw_data/sdss_cutout.csv'))
 
 if 1 in tasks:
 
-    out_file_ecdf = '../data/results/ex_01/ecdf/ecdf.pdf'
+    out_file_ecdf = '../data/results/ex_01/ecdf/ecdf.png'
     out_file_rband_redshift = '../data/results/ex_01/rband_redshift/rband_redshift.png'
 
     # Plot
     sdss.plot_ecdf(save_path=out_file_ecdf)
     sdss.plot_rband_redshift(save_path=out_file_rband_redshift)
 
+    out_file_rband_redshift_filtered = '../data/results/ex_01/rband_redshift/rband_redshift_filtered.png'
+
     # Filter
     sdss.filter_params()
 
     # Plot
-    sdss.plot_rband_redshift(xlim=(0, 0.2))
+    sdss.plot_rband_redshift(xlim=(0, 0.2), save_path=out_file_rband_redshift_filtered)
 
 else:
 
@@ -45,7 +48,7 @@ else:
 
 if 2 in tasks:
 
-    out_file_colors = '../data/results/ex_01/colors/colors.pdf'
+    out_file_colors = '../data/results/ex_01/colors/colors.png'
 
     # Plot
     sdss.plot_colors(save_path=out_file_colors)
@@ -69,7 +72,7 @@ if 3 in tasks:
 ########################################
 
 if 4 in tasks:
-    out_file_maps = '../data/results/ex_01/maps/maps.pdf'
+    out_file_maps = '../data/results/ex_01/maps/maps.png'
 
     sdss.plot_maps(save_path=out_file_maps)
 
@@ -79,15 +82,14 @@ if 4 in tasks:
 ########################################
 
 if 5 in tasks:
-    # Initialize the SDSS class with data from the CSV file
-    sdss = SDSS(pd.read_csv('../data/raw_data/sdss_cutout.csv'))
 
     # Define parameter for the two point correlation function
 
-    iterations = 1000
-    sample_size = 250
+    iterations = 10_000
+    sample_size = 400
 
-    # Filter the data based on the parameters defined in the filter_params method
-    sdss.filter_params()
-    sdss.two_point_correlation(iterations=iterations, m_samples=sample_size, plot=True)
+    out_file_correlation = \
+        f'../data/results/ex_01/two_point_correlation/results_{str(iterations)}_{str(sample_size)}.png'
+
+    sdss.two_point_correlation(iterations=iterations, m_samples=sample_size, plot=True, save_path=out_file_correlation)
 
