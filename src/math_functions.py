@@ -44,9 +44,3 @@ def landy_szalay(dd: np.array, dr: np.array, rr: np.array, n: int) -> np.array:
 
 
 
-
-if __name__ == "__main__":
-    theta = np.array([1, 2, 3, 4, 5, 6])
-    phi = np.array([4, 5, 6, 7, 8, 9])
-
-
