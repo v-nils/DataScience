@@ -10,10 +10,11 @@ import scienceplots
 import matplotlib.ticker as ticker
 import matplotlib
 import matplotlib.colors as mcolors
-
+from sklearn.neighbors import KernelDensity, NearestNeighbors
+from scipy.spatial import Voronoi, voronoi_plot_2d
+from scipy.spatial import ConvexHull
 
 # Global settings
-# plt.style.use(['science', 'ieee', 'no-latex'])
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
 
@@ -21,9 +22,9 @@ matplotlib.rcParams['ps.fonttype'] = 42
 def _statistics(data: np.array, alpha: float = 0.95) -> dict[str, np.array]:
     """
     Utility function to calculate statistic parameters of the
-    :param data:
-    :param alpha:
-    :return:
+    :param data: (np.array) Data to calculate the statistic parameters
+    :param alpha: (float) Confidence level
+    :return: (dict) Dictionary with the mean, variance and standard deviation
     """
     results_avg, results_var, results_std = [], [], []
 
@@ -42,6 +43,16 @@ def _plot_correlation_fun(omega: np.array,
                           plot_params: list | None = None,
                           plot_conf_interval: bool = True,
                           **kwargs) -> None:
+    """
+    Private function to plot results of the two-point correlation function
+    :param omega: (np.array) Angular distance
+    :param params_red: (dict) Parameters for the red galaxies
+    :param params_blue: (dict) Parameters for the blue galaxies
+    :param plot_params: (list) Parameters to plot
+    :param plot_conf_interval: (bool) Plot confidence interval
+    :param kwargs: Additional arguments
+    :return:
+    """
 
     plt.style.use(['science', 'ieee'])
 
@@ -122,7 +133,7 @@ class SDSS:
     def __init__(self, data: pd.DataFrame) -> None:
         """
         Initialize the SDSS class with the data from the CSV file.
-        :param data: (Pandas DataFrame) Data from the CSV file (ra, de, z_redshift, u, g, r, i, z_magnitude
+        :param data: (Pandas DataFrame) Data from the CSV file (ra, de, z_redshift, u, g, r, i, z_magnitude, ...)
         """
 
         # SDSS as Pandas Dataframe
@@ -137,7 +148,7 @@ class SDSS:
         self.r = data.iloc[:, 5]
         self.i = data.iloc[:, 6]
         self.z_magnitude = data.iloc[:, 7]
-        self.indices = data[(self.z_redshift < 0.12) & (self.z_redshift > 0.08)]
+        self.indices = data[(self.z_redshift > 0.08) & (self.z_redshift < 0.12)]
         self.color = self.u - self.r
         self.blue = self.color[self.color <= 2.3]
         self.red = self.color[self.color > 2.3]
@@ -165,16 +176,39 @@ class SDSS:
         self.correlation_results_blue: dict | None = None
 
     def sample_down(self, n: int) -> None:
+        """
+        Downsample the data to the specified sample size.
+        :param n: (int) Sample size
+        :return: None
+        """
         sampled_data_red = self.data[self.red_idx].sample(int(n / 2), random_state=42)
         sampled_data_blue = self.data[self.blue_idx].sample(int(n / 2), random_state=42)
 
         sampled_data = pd.concat([sampled_data_red, sampled_data_blue])
         self.__init__(sampled_data)
 
-    def filter_params(self):
+    def select_redshift_slice(self, z_min: float, z_max: float) -> None:
+        """
+        Select a slice of the redshift defined by z_min and z_max (excluding).
+        :param z_min: (float) Minimum redshift
+        :param z_max: (float) Maximum redshift
+        :return: None
+        """
+        self.__init__(self.data[(self.z_redshift > z_min) & (self.z_redshift < z_max)])
+
+    def filter_params(self) -> None:
+        """
+        Filter the data based on the parameters defined in the filter_params method.
+        :return:
+        """
         self.__init__(self.indices)
 
     def plot_ecdf(self, **kwargs) -> None:
+        """
+        Plot the empirical cumulative distribution function (eCDF) of the redshift.
+        :param kwargs: Additional arguments
+        :return: None
+        """
 
         plt.style.use(['science', 'ieee', 'no-latex'])
 
@@ -197,7 +231,13 @@ class SDSS:
         else:
             plt.show()
 
-    def plot_rband_redshift(self, xlim: tuple = (0, 0.6), **kwargs):
+    def plot_rband_redshift(self, xlim: tuple = (0, 0.6), **kwargs) -> None:
+        """
+        Plot the r-band magnitude as a function of the redshift.
+        :param xlim: (tuple) limits for the galaxies
+        :param kwargs: Additional arguments
+        :return: None
+        """
 
         plt.style.use(['science', 'ieee', 'scatter', 'no-latex'])
         fig, ax = plt.subplots(1, 1)
@@ -217,14 +257,19 @@ class SDSS:
         else:
             plt.show()
 
-    def plot_colors(self, **kwargs):
+    def plot_colors(self, **kwargs) -> None:
+        """
+        Plot the u-r color as a function of the r-band magnitude.
+        :param kwargs: Additional arguments
+        :return: None
+        """
 
         plt.style.use(['science', 'ieee', 'scatter', 'no-latex'])
         fig, ax = plt.subplots(1, 1)
 
-        ax.scatter(self.r[self.blue.index], self.blue, s=1.5, alpha=0.15, color='darkblue', label='Blue galaxies', lw=0.1)
-        ax.scatter(self.r[self.red.index], self.red, s=1.5, alpha=0.15, color='darkred', label='Red galaxies', lw=0.1)
-        #ax.legend(loc='best')
+        ax.scatter(self.r[self.blue.index], self.blue, s=0.2, alpha=0.1, lw=0.05, color='darkblue',
+                   label='Blue galaxies')
+        ax.scatter(self.r[self.red.index], self.red, s=0.2, alpha=0.1, lw=0.05, color='darkred', label='Red galaxies')
         ax.set_xlabel('r-band mag')
         ax.set_ylabel('u-r')
 
@@ -239,29 +284,74 @@ class SDSS:
         else:
             plt.show()
 
-    def plot_maps(self, **kwargs):
+    def plot_maps(self, content: list[str] | str | None = None, **kwargs) -> None:
+        """
+        Plot the angular and redshift-space maps for the red and blue galaxies.
+        :param content: (list) Content to plot
+        :param kwargs: Additional arguments
+        :return: None
+        """
 
         plt.style.use(['science', 'ieee', 'scatter', 'no-latex'])
-        fig, ax = plt.subplots(2, 2, figsize=(15, 15))
-        ax[0, 0].set_title('Angular Map for blue galaxies', fontsize=20)
-        ax[0, 0].set_xlabel('RA [deg]', fontsize=15)
-        ax[0, 0].set_ylabel('DEC [deg]', fontsize=15)
-        ax[0, 0].scatter(self.ra[self.blue.index], self.de[self.blue.index], s=0.6, alpha=0.15, color='darkblue')
 
-        ax[0, 1].set_title('Angular Map for red galaxies', fontsize=20)
-        ax[0, 1].set_xlabel('RA [deg]', fontsize=15)
-        ax[0, 1].set_ylabel('DEC [deg]', fontsize=15)
-        ax[0, 1].scatter(self.ra[self.red.index], self.de[self.red.index], s=0.6, alpha=0.15, color='darkred')
+        if isinstance(content, str):
+            content = [content]
+            print(content)
 
-        ax[1, 0].set_title('Redshift-space map for blue galaxies', fontsize=20)
-        ax[1, 0].set_xlabel('RA [deg]', fontsize=15)
-        ax[1, 0].set_ylabel('Redshift [-]', fontsize=15)
-        ax[1, 0].scatter(self.ra[self.blue.index], self.z_redshift[self.blue.index], s=0.6, alpha=0.15, color='darkblue')
+        if content is None or set(content) == {'angular', 'redshift'} or set(content) == {'both'}:
+            fig, ax = plt.subplots(2, 2, figsize=(15, 15))
+            ax[0, 0].set_title('Angular Map for blue galaxies', fontsize=20)
+            ax[0, 0].set_xlabel('RA [deg]', fontsize=15)
+            ax[0, 0].set_ylabel('DEC [deg]', fontsize=15)
+            ax[0, 0].scatter(self.ra[self.blue.index], self.de[self.blue.index], s=0.6, alpha=0.15, color='darkblue')
 
-        ax[1, 1].set_title('Redshift-space map for red galaxies', fontsize=20)
-        ax[1, 1].set_xlabel('RA [deg]', fontsize=15)
-        ax[1, 1].set_ylabel('Redshift [-]', fontsize=15)
-        ax[1, 1].scatter(self.ra[self.red.index], self.z_redshift[self.red.index], s=0.6, alpha=0.15, color='darkred')
+            ax[0, 1].set_title('Angular Map for red galaxies', fontsize=20)
+            ax[0, 1].set_xlabel('RA [deg]', fontsize=15)
+            ax[0, 1].set_ylabel('DEC [deg]', fontsize=15)
+            ax[0, 1].scatter(self.ra[self.red.index], self.de[self.red.index], s=0.6, alpha=0.15, color='darkred')
+
+            ax[1, 0].set_title('Redshift-space map for blue galaxies', fontsize=20)
+            ax[1, 0].set_xlabel('RA [deg]', fontsize=15)
+            ax[1, 0].set_ylabel('Redshift [-]', fontsize=15)
+            ax[1, 0].scatter(self.ra[self.blue.index], self.z_redshift[self.blue.index], s=0.6, alpha=0.15,
+                             color='darkblue')
+
+            ax[1, 1].set_title('Redshift-space map for red galaxies', fontsize=20)
+            ax[1, 1].set_xlabel('RA [deg]', fontsize=15)
+            ax[1, 1].set_ylabel('Redshift [-]', fontsize=15)
+            ax[1, 1].scatter(self.ra[self.red.index], self.z_redshift[self.red.index], s=0.6, alpha=0.15,
+                             color='darkred')
+
+        elif not set(content).issubset({'angular', 'redshift'}):
+            raise ValueError("Content must be either 'angular' or 'redshift' or 'both'")
+
+        elif set(content) == {'angular'}:
+            fig, ax = plt.subplots(1, 2, figsize=(15, 7.5))
+            ax[0].set_title('Angular Map for blue galaxies', fontsize=20)
+            ax[0].set_xlabel('RA [deg]', fontsize=15)
+            ax[0].set_ylabel('DEC [deg]', fontsize=15)
+            ax[0].scatter(self.ra[self.blue.index], self.de[self.blue.index], s=0.6, alpha=0.15, color='darkblue')
+
+            ax[1].set_title('Angular Map for red galaxies', fontsize=20)
+            ax[1].set_xlabel('RA [deg]', fontsize=15)
+            ax[1].set_ylabel('DEC [deg]', fontsize=15)
+            ax[1].scatter(self.ra[self.red.index], self.de[self.red.index], s=0.6, alpha=0.15, color='darkred')
+
+        elif set(content) == {'redshift'}:
+            fig, ax = plt.subplots(1, 2, figsize=(15, 7.5))
+            ax[0].set_title('Redshift-space map for blue galaxies', fontsize=20)
+            ax[0].set_xlabel('RA [deg]', fontsize=15)
+            ax[0].set_ylabel('Redshift [-]', fontsize=15)
+            ax[0].scatter(self.ra[self.blue.index], self.z_redshift[self.blue.index], s=0.6, alpha=0.15,
+                          color='darkblue')
+
+            ax[1].set_title('Redshift-space map for red galaxies', fontsize=20)
+            ax[1].set_xlabel('RA [deg]', fontsize=15)
+            ax[1].set_ylabel('Redshift [-]', fontsize=15)
+            ax[1].scatter(self.ra[self.red.index], self.z_redshift[self.red.index], s=0.6, alpha=0.15,
+                          color='darkred')
+        else:
+            raise ValueError("Unexpected error occurred")
 
         save_path: str | None = kwargs.get('save_path', None)
 
@@ -274,7 +364,64 @@ class SDSS:
         else:
             plt.show()
 
+    def plot_2d_histograms(self, binwidth: float | list | np.ndarray | None = None, **kwargs) -> None:
+        """
+        Plot the two-dimensional density of the red and blue galaxies.
+        :param binwidth:
+        :param kwargs:
+        :return:
+        """
+
+        plt.style.use(['science', 'ieee', 'scatter', 'no-latex'])
+
+        if isinstance(binwidth, int):
+            binwidth = [binwidth]
+        elif binwidth is None:
+            binwidth = [50, 100, 500]
+
+        rows: int = int(np.ceil(len(binwidth) / 3))
+        cols: int = 3 if len(binwidth) > 3 else len(binwidth)
+
+        fig_height: float = rows * 5
+        fig_width: float = 18
+
+        fig, ax = plt.subplots(rows, cols, figsize=(fig_width, fig_height))
+
+        for i, bw in enumerate(binwidth):
+            if len(binwidth) > 3:
+                current_ax = ax[i // 3, i % 3]
+            elif len(binwidth) > 1:
+                current_ax = ax[i]
+            else:
+                current_ax = ax
+
+            current_ax.set_title(f'2D Histogram for binwidth = {bw}', fontsize=18)
+            hist = current_ax.hist2d(self.ra, self.de, bins=bw, cmap='plasma', alpha=0.8, vmin=0, vmax=20)
+            current_ax.set_xlabel('RA [deg]', fontsize=12)
+            current_ax.set_ylabel('DEC [deg]', fontsize=12)
+
+        cbar_size = 14 / fig_height if fig_height > 5 else 5
+        cbar = plt.colorbar(hist[3], ax=ax, shrink=cbar_size)
+        cbar.set_label('Density', fontsize=12)
+
+        save_path: str | None = kwargs.get('save_path', None)
+
+        if save_path is not None:
+            if not os.path.exists(os.path.dirname(save_path)):
+                raise FileNotFoundError(f"Path {save_path} does not exist")
+
+            print('Save figure to:', save_path)
+            plt.savefig(save_path, bbox_inches='tight')
+
+        else:
+            plt.show()
+
     def _generate_random_positions(self, m: int | None = None) -> None:
+        """
+        Generate random positions for the two-point correlation function.
+        :param m: (int) Number of random positions
+        :return: None
+        """
 
         if m is None:
             m = self.num_red if self.num_red < self.num_blue else self.num_blue
@@ -283,6 +430,12 @@ class SDSS:
         self.random_theta = np.pi / 2 - np.random.uniform(5, 65, size=m) / 180 * np.pi
 
     def _two_point_correlation(self, plot: bool = False, **kwargs) -> np.array:
+        """
+        Compute the two-point correlation function for the red and blue galaxies.
+        :param plot: (bool) Plot the results
+        :param kwargs: Additional arguments
+        :return: (np.array) Two-point correlation function for the red and blue galaxies
+        """
 
         m = kwargs.get('m', self.num_red if self.num_red < self.num_blue else self.num_blue)
 
@@ -335,6 +488,13 @@ class SDSS:
         return correlation_blue, correlation_red
 
     def two_point_correlation(self, iterations: int = 100, m_samples: int = 100, **kwargs) -> None:
+        """
+        Compute the two-point correlation function for the red and blue galaxies.
+        :param iterations: (int) Number of iterations
+        :param m_samples: (int) Size of samples
+        :param kwargs: Additional arguments
+        :return: None
+        """
 
         print(f"Computing two-point correlation function for {iterations} iterations with {m_samples} samples")
 
@@ -362,6 +522,11 @@ class SDSS:
             self.plot_correlation()
 
     def plot_correlation(self, **kwargs) -> None:
+        """
+        Plot the results of the two-point correlation function.
+        :param kwargs: Additional arguments
+        :return: None
+        """
         if self.correlation_results_red is not None and self.correlation_results_blue is not None:
             omega = np.geomspace(0.003, 0.3, 11)
             _plot_correlation_fun(omega, self.correlation_results_red, self.correlation_results_blue, **kwargs)
@@ -370,25 +535,4 @@ class SDSS:
 
 
 if __name__ == "__main__":
-    # Set the sample size
-    iterations = 5000
-    sample_size = 100
-
-    # Initialize the SDSS class with data from the CSV file
-    sdss = SDSS(pd.read_csv('../data/raw_data/sdss_cutout.csv'))
-
-    # Filter the data based on the parameters defined in the filter_params method
-    sdss.filter_params()
-
-    # Downsample the data to the specified sample size
-    # sdss.sample_down(sample_size)
-
-    sdss.two_point_correlation(iterations=iterations, m_samples=sample_size)
-
-    f_format = '.png'
-    f_name = 'results_' + str(iterations) + '_' + str(sample_size) + f_format
-    f_path = os.path.join(f'../data/results', f_name)
-
-    sdss.plot_correlation(plot_params=['mean'],
-                          save_path=f_path)
-
+    pass
