@@ -34,6 +34,6 @@ if 1 in tasks:
 if 2 in tasks:
     save_path_histograms: str = '../data/results/ex_02/histograms/2d_histograms.png'
 
-    _bins = np.linspace(100, 500, 15)
-    bins = np.round(_bins).astype(int)
+    bins_ = np.linspace(100, 500, 15)
+    bins = np.round(bins_).astype(int)
     sdss.plot_2d_histograms(bins, save_path=save_path_histograms)
