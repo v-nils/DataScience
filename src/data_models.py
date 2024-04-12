@@ -13,6 +13,7 @@ import matplotlib.colors as mcolors
 from sklearn.neighbors import KernelDensity, NearestNeighbors
 from scipy.spatial import Voronoi, voronoi_plot_2d
 from scipy.spatial import ConvexHull
+from src.util_functions import process_plot
 
 # Global settings
 matplotlib.rcParams['pdf.fonttype'] = 42
@@ -181,8 +182,8 @@ class SDSS:
         :param n: (int) Sample size
         :return: None
         """
-        sampled_data_red = self.data[self.red_idx].sample(int(n / 2), random_state=42)
-        sampled_data_blue = self.data[self.blue_idx].sample(int(n / 2), random_state=42)
+        sampled_data_red = self.data[self.red_idx].sample(int(n / 2))
+        sampled_data_blue = self.data[self.blue_idx].sample(int(n / 2))
 
         sampled_data = pd.concat([sampled_data_red, sampled_data_blue])
         self.__init__(sampled_data)
@@ -220,16 +221,8 @@ class SDSS:
         ax.legend(loc='best')
         ax.eventplot(s_o, lineoffsets=-0.1, linelengths=0.05, lw=0.1, colors='k')
         ax.legend(bbox_to_anchor=(0.57, 1.13), loc='upper left')
-        save_path: str | None = kwargs.get('save_path', None)
 
-        if save_path is not None:
-            if not os.path.exists(os.path.dirname(save_path)):
-                raise FileNotFoundError(f"Path {save_path} does not exist")
-
-            print('Save figure to:', save_path)
-            plt.savefig(save_path, bbox_inches='tight')
-        else:
-            plt.show()
+        process_plot(plt, kwargs.get('save_path', None))
 
     def plot_rband_redshift(self, xlim: tuple = (0, 0.6), **kwargs) -> None:
         """
@@ -246,16 +239,8 @@ class SDSS:
         ax.set_xlim(*xlim)
         ax.set_ylim(12, 18)
         ax.set_ylabel('r-band magnitude')
-        rs_save_path: str | None = kwargs.get('save_path', None)
 
-        if rs_save_path is not None:
-            if not os.path.exists(os.path.dirname(rs_save_path)):
-                raise FileNotFoundError(f"Path {rs_save_path} does not exist")
-
-            print('Save figure to:', rs_save_path)
-            plt.savefig(rs_save_path, bbox_inches='tight', dpi=900)
-        else:
-            plt.show()
+        process_plot(plt, kwargs.get('save_path', None))
 
     def plot_colors(self, **kwargs) -> None:
         """
@@ -273,16 +258,7 @@ class SDSS:
         ax.set_xlabel('r-band mag')
         ax.set_ylabel('u-r')
 
-        cl_save_path: str | None = kwargs.get('save_path', None)
-
-        if cl_save_path is not None:
-            if not os.path.exists(os.path.dirname(cl_save_path)):
-                raise FileNotFoundError(f"Path {cl_save_path} does not exist")
-
-            print('Save figure to:', cl_save_path)
-            plt.savefig(cl_save_path, bbox_inches='tight')
-        else:
-            plt.show()
+        process_plot(plt, kwargs.get('save_path', None))
 
     def plot_maps(self, content: list[str] | str | None = None, **kwargs) -> None:
         """
@@ -353,44 +329,35 @@ class SDSS:
         else:
             raise ValueError("Unexpected error occurred")
 
-        save_path: str | None = kwargs.get('save_path', None)
+        process_plot(plt, kwargs.get('save_path', None))
 
-        if save_path is not None:
-            if not os.path.exists(os.path.dirname(save_path)):
-                raise FileNotFoundError(f"Path {save_path} does not exist")
-
-            print('Save figure to:', save_path)
-            plt.savefig(save_path, bbox_inches='tight')
-        else:
-            plt.show()
-
-    def plot_2d_histograms(self, binwidth: float | list | np.ndarray | None = None, **kwargs) -> None:
+    def plot_2d_histograms(self, n_bins: float | list | np.ndarray | None = None, **kwargs) -> None:
         """
         Plot the two-dimensional density of the red and blue galaxies.
-        :param binwidth:
-        :param kwargs:
-        :return:
+        :param n_bins: (float) Binwidth for the histogram
+        :param kwargs: Additional arguments
+        :return: None
         """
 
         plt.style.use(['science', 'ieee', 'scatter', 'no-latex'])
 
-        if isinstance(binwidth, int):
-            binwidth = [binwidth]
-        elif binwidth is None:
-            binwidth = [50, 100, 500]
+        if isinstance(n_bins, int):
+            n_bins = [n_bins]
+        elif n_bins is None:
+            n_bins = [50, 100, 500]
 
-        rows: int = int(np.ceil(len(binwidth) / 3))
-        cols: int = 3 if len(binwidth) > 3 else len(binwidth)
+        rows: int = int(np.ceil(len(n_bins) / 3))
+        cols: int = 3 if len(n_bins) > 3 else len(n_bins)
 
         fig_height: float = rows * 5
         fig_width: float = 18
 
         fig, ax = plt.subplots(rows, cols, figsize=(fig_width, fig_height))
 
-        for i, bw in enumerate(binwidth):
-            if len(binwidth) > 3:
+        for i, bw in enumerate(n_bins):
+            if len(n_bins) > 3:
                 current_ax = ax[i // 3, i % 3]
-            elif len(binwidth) > 1:
+            elif len(n_bins) > 1:
                 current_ax = ax[i]
             else:
                 current_ax = ax
@@ -404,17 +371,7 @@ class SDSS:
         cbar = plt.colorbar(hist[3], ax=ax, shrink=cbar_size)
         cbar.set_label('Density', fontsize=12)
 
-        save_path: str | None = kwargs.get('save_path', None)
-
-        if save_path is not None:
-            if not os.path.exists(os.path.dirname(save_path)):
-                raise FileNotFoundError(f"Path {save_path} does not exist")
-
-            print('Save figure to:', save_path)
-            plt.savefig(save_path, bbox_inches='tight')
-
-        else:
-            plt.show()
+        process_plot(plt, kwargs.get('save_path', None))
 
     def _generate_random_positions(self, m: int | None = None) -> None:
         """
