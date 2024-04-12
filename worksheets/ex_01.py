@@ -10,7 +10,7 @@ from src.data_models import SDSS
 ########################################
 
 # Here we define the tasks that we want to run
-tasks = [2]
+tasks = [1]
 
 # Load SDSS as class
 sdss = SDSS(pd.read_csv('../data/raw_data/sdss_cutout.csv'))
