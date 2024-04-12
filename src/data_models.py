@@ -13,7 +13,7 @@ import matplotlib.colors as mcolors
 from sklearn.neighbors import KernelDensity, NearestNeighbors
 from scipy.spatial import Voronoi, voronoi_plot_2d
 from scipy.spatial import ConvexHull
-from src.util_functions import _compute_voronoi_volumes, process_plot
+from src.util_functions import _compute_voronoi_volumes, process_plot, _create_subplots
 
 
 # Global settings
@@ -135,6 +135,7 @@ class SDSS:
     def __init__(self, data: pd.DataFrame) -> None:
         """
         Initialize the SDSS class with the data from the CSV file.
+
         :param data: (Pandas DataFrame) Data from the CSV file (ra, de, z_redshift, u, g, r, i, z_magnitude, ...)
         """
 
@@ -184,11 +185,15 @@ class SDSS:
     def sample_down(self, n: int) -> None:
         """
         Downsample the data to the specified sample size.
+
         :param n: (int) Sample size
         :return: None
         """
-        sampled_data_red = self.data[self.red_idx].sample(int(n / 2))
-        sampled_data_blue = self.data[self.blue_idx].sample(int(n / 2))
+        try:
+            sampled_data_red = self.data[self.red_idx].sample(int(n / 2))
+            sampled_data_blue = self.data[self.blue_idx].sample(int(n / 2))
+        except ValueError:
+            raise ValueError("Sample size is too large")
 
         sampled_data = pd.concat([sampled_data_red, sampled_data_blue])
         self.__init__(sampled_data)
@@ -196,6 +201,7 @@ class SDSS:
     def _standardize_coordinates(self) -> None:
         """
         Standardize the coordinates.
+
         :return: None
         """
         self._ra_standardized = (self.ra - np.mean(self.ra)) / np.std(self.ra)
@@ -344,7 +350,6 @@ class SDSS:
 
         process_plot(plt, kwargs.get('save_path', None))
 
-
     def nearest_neighbor_estimation(self, n_neighbors: np.ndarray,
                                     use_standardized_vals: bool = True,
                                     bins: int = 50,
@@ -373,31 +378,20 @@ class SDSS:
             ra = self.ra
             de = self.de
 
-        rows: int = int(np.ceil(len(n_neighbors) / 3))
-        cols: int = 3 if len(n_neighbors) > 3 else len(n_neighbors)
-
-        fig_height: float = rows * 5
-        fig_width: float = 18
-
-        fig, ax = plt.subplots(rows, cols, figsize=(fig_width, fig_height))
+        plots = _create_subplots(len(n_neighbors))
 
         for i, n in enumerate(n_neighbors):
             if len(n_neighbors) > 3:
-                current_ax = ax[i // 3, i % 3]
+                current_ax = plots.axes[i // 3, i % 3]
             elif len(n_neighbors) > 1:
-                current_ax = ax[i]
+                current_ax = plots.axes[i]
             else:
-                current_ax = ax
+                current_ax = plots.axes
 
             nn = NearestNeighbors(n_neighbors=n, algorithm='ball_tree')
             nn.fit(np.vstack([ra, de]).T)
 
             distances, indices = nn.kneighbors()
-
-            print("blabla", distances.shape)
-
-            #print(np.sort(distances[:, -1]))
-
             density = 1 / (np.pi * distances[:, -1] ** 2)
 
             current_ax.hist(density, bins=bins, alpha=0.6, color='darkblue')
@@ -405,17 +399,7 @@ class SDSS:
             current_ax.set_xlabel('Density', fontsize=12)
             current_ax.set_ylabel('Frequency', fontsize=12)
 
-
-        save_path: str | None = kwargs.get('save_path', None)
-
-        if save_path is not None:
-            if not os.path.exists(os.path.dirname(save_path)):
-                raise FileNotFoundError(f"Path {save_path} does not exist")
-
-            print('Save figure to:', save_path)
-            plt.savefig(save_path, bbox_inches='tight')
-        else:
-            plt.show()
+        process_plot(plt, kwargs.get('save_path', None))
 
     def delaunay_triangulation(self, use_standardized_vals: bool = True, **kwargs) -> None:
         """
@@ -448,16 +432,7 @@ class SDSS:
         ax.set_xlabel(f'RA [{unit}]', fontsize=15)
         ax.set_ylabel(f'DEC [{unit}]', fontsize=15)
 
-        save_path: str | None = kwargs.get('save_path', None)
-
-        if save_path is not None:
-            if not os.path.exists(os.path.dirname(save_path)):
-                raise FileNotFoundError(f"Path {save_path} does not exist")
-
-            print('Save figure to:', save_path)
-            plt.savefig(save_path, bbox_inches='tight')
-        else:
-            plt.show()
+        process_plot(plt, kwargs.get('save_path', None))
 
     def voroni_volumes(self, use_standardized_vals: bool = True, **kwargs) -> None:
         """
@@ -485,25 +460,16 @@ class SDSS:
             unit = 'deg'
 
         vor = Voronoi(np.vstack([ra, de]).T)
-        volumes = _compute_voronoi_volumes(vor) # Not used
+        volumes = _compute_voronoi_volumes(vor)  # Not used
 
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
-        voronoi_plot_2d(vor, ax=ax, show_vertices=False, line_colors='darkblue', line_width=0.4, line_alpha=0.6, point_size=0.5)
+        voronoi_plot_2d(vor, ax=ax, show_vertices=False, line_colors='darkblue',
+                        line_width=0.4, line_alpha=0.6, point_size=0.5)
         ax.set_title('Voronoi Diagram', fontsize=20)
         ax.set_xlabel(f'RA {unit}', fontsize=15)
         ax.set_ylabel(f'DEC [deg] {unit}', fontsize=15)
 
-        save_path: str | None = kwargs.get('save_path', None)
-
-        if save_path is not None:
-            if not os.path.exists(os.path.dirname(save_path)):
-                raise FileNotFoundError(f"Path {save_path} does not exist")
-
-            print('Save figure to:', save_path)
-            plt.savefig(save_path, bbox_inches='tight')
-        else:
-            plt.show()
-
+        process_plot(plt, kwargs.get('save_path', None))
 
     def kernel_density_estimation(self,
                                   bandwidths: np.ndarray,
@@ -569,56 +535,41 @@ class SDSS:
             cbar = fig.colorbar(contour, ax=current_ax)
             cbar.set_label('Density', fontsize=12)
 
+        process_plot(plt, kwargs.get('save_path', None))
 
-        save_path: str | None = kwargs.get('save_path', None)
-
-        if save_path is not None:
-            if not os.path.exists(os.path.dirname(save_path)):
-                raise FileNotFoundError(f"Path {save_path} does not exist")
-
-            print('Save figure to:', save_path)
-            plt.savefig(save_path, bbox_inches='tight')
-        else:
-            plt.show()
-
-    def plot_2d_histograms(self, binwidth: float | list | np.ndarray | None = None, **kwargs) -> None:
+    def plot_2d_histograms(self, bins: float | list | np.ndarray | None = None, **kwargs) -> None:
         """
         Plot the two-dimensional density of the red and blue galaxies.
-        :param n_bins: (float) Binwidth for the histogram
+        :param bins: (float) Bins for the histogram
         :param kwargs: Additional arguments
         :return: None
         """
 
+        global hist
         plt.style.use(['science', 'ieee', 'scatter', 'no-latex'])
 
-        if isinstance(n_bins, int):
-            n_bins = [n_bins]
-        elif n_bins is None:
-            n_bins = [50, 100, 500]
+        if isinstance(bins, int):
+            bins = [bins]
+        elif bins is None:
+            bins = [50, 100, 500]
 
-        rows: int = int(np.ceil(len(n_bins) / 3))
-        cols: int = 3 if len(n_bins) > 3 else len(n_bins)
+        plots = _create_subplots(len(bins))
 
-        fig_height: float = rows * 5
-        fig_width: float = 18
-
-        fig, ax = plt.subplots(rows, cols, figsize=(fig_width, fig_height))
-
-        for i, bw in enumerate(n_bins):
-            if len(n_bins) > 3:
-                current_ax = ax[i // 3, i % 3]
-            elif len(n_bins) > 1:
-                current_ax = ax[i]
+        for i, bw in enumerate(bins):
+            if len(bins) > 3:
+                current_ax = plots.axes[i // 3, i % 3]
+            elif len(bins) > 1:
+                current_ax = plots.axes[i]
             else:
-                current_ax = ax
+                current_ax = plots.axes
 
             current_ax.set_title(f'2D Histogram for binwidth = {bw}', fontsize=18)
             hist = current_ax.hist2d(self.ra, self.de, bins=bw, cmap='plasma', alpha=0.8, vmin=0, vmax=20)
             current_ax.set_xlabel('RA [deg]', fontsize=12)
             current_ax.set_ylabel('DEC [deg]', fontsize=12)
 
-        cbar_size = 14 / fig_height if fig_height > 5 else 5
-        cbar = plt.colorbar(hist[3], ax=ax, shrink=cbar_size)
+        cbar_size = 14 / plots.height if plots.height > 5 else 5
+        cbar = plt.colorbar(hist[3], ax=plots.axes, shrink=cbar_size)
         cbar.set_label('Density', fontsize=12)
 
         process_plot(plt, kwargs.get('save_path', None))
@@ -626,6 +577,7 @@ class SDSS:
     def _generate_random_positions(self, m: int | None = None) -> None:
         """
         Generate random positions for the two-point correlation function.
+
         :param m: (int) Number of random positions
         :return: None
         """
@@ -639,6 +591,7 @@ class SDSS:
     def _two_point_correlation(self, plot: bool = False, **kwargs) -> np.array:
         """
         Compute the two-point correlation function for the red and blue galaxies.
+
         :param plot: (bool) Plot the results
         :param kwargs: Additional arguments
         :return: (np.array) Two-point correlation function for the red and blue galaxies
@@ -697,6 +650,7 @@ class SDSS:
     def two_point_correlation(self, iterations: int = 100, m_samples: int = 100, **kwargs) -> None:
         """
         Compute the two-point correlation function for the red and blue galaxies.
+
         :param iterations: (int) Number of iterations
         :param m_samples: (int) Size of samples
         :param kwargs: Additional arguments
@@ -705,8 +659,8 @@ class SDSS:
 
         print(f"Computing two-point correlation function for {iterations} iterations with {m_samples} samples")
 
-        results_red = []
-        results_blue = []
+        results_red: np.array = []
+        results_blue: np.array = []
 
         for i in range(iterations):
             print(f"iteration {i + 1}/{iterations}")
@@ -731,9 +685,11 @@ class SDSS:
     def plot_correlation(self, **kwargs) -> None:
         """
         Plot the results of the two-point correlation function.
+
         :param kwargs: Additional arguments
         :return: None
         """
+
         if self.correlation_results_red is not None and self.correlation_results_blue is not None:
             omega = np.geomspace(0.003, 0.3, 11)
             _plot_correlation_fun(omega, self.correlation_results_red, self.correlation_results_blue, **kwargs)
