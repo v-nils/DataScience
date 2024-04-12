@@ -13,6 +13,7 @@ import matplotlib.colors as mcolors
 from sklearn.neighbors import KernelDensity, NearestNeighbors
 from scipy.spatial import Voronoi, voronoi_plot_2d
 from scipy.spatial import ConvexHull
+from src.util_functions import _compute_voronoi_volumes
 
 # Global settings
 matplotlib.rcParams['pdf.fonttype'] = 42
@@ -142,6 +143,10 @@ class SDSS:
         # SDSS Parameter extracted
         self.ra = data.iloc[:, 0]
         self.de = data.iloc[:, 1]
+
+        self._ra_standardized = None
+        self._de_standardized = None
+
         self.z_redshift = data.iloc[:, 2]
         self.u = data.iloc[:, 3]
         self.g = data.iloc[:, 4]
@@ -186,6 +191,14 @@ class SDSS:
 
         sampled_data = pd.concat([sampled_data_red, sampled_data_blue])
         self.__init__(sampled_data)
+
+    def _standardize_coordinates(self) -> None:
+        """
+        Standardize the coordinates.
+        :return: None
+        """
+        self._ra_standardized = (self.ra - np.mean(self.ra)) / np.std(self.ra)
+        self._de_standardized = (self.de - np.mean(self.de)) / np.std(self.de)
 
     def select_redshift_slice(self, z_min: float, z_max: float) -> None:
         """
@@ -352,6 +365,242 @@ class SDSS:
                           color='darkred')
         else:
             raise ValueError("Unexpected error occurred")
+
+        save_path: str | None = kwargs.get('save_path', None)
+
+        if save_path is not None:
+            if not os.path.exists(os.path.dirname(save_path)):
+                raise FileNotFoundError(f"Path {save_path} does not exist")
+
+            print('Save figure to:', save_path)
+            plt.savefig(save_path, bbox_inches='tight')
+        else:
+            plt.show()
+
+    def nearest_neighbor_estimation(self, n_neighbors: np.ndarray,
+                                    use_standardized_vals: bool = True,
+                                    bins: int = 50,
+                                    **kwargs) -> None:
+        """
+        Nearest neighbor estimation.
+
+        :param bins:
+        :param n_neighbors: (np.ndarray) Array of neighbors
+        :param use_standardized_vals: (bool) Standardize values
+        :param kwargs: Additional arguments
+        :return: None
+        """
+
+        plt.style.use(['science', 'ieee', 'no-latex'])
+
+        # Check whether to use standardized values without dimension or not
+        if use_standardized_vals:
+
+            if self._ra_standardized is None or self._de_standardized is None:
+                self._standardize_coordinates()
+
+            ra = self._ra_standardized
+            de = self._de_standardized
+        else:
+            ra = self.ra
+            de = self.de
+
+        rows: int = int(np.ceil(len(n_neighbors) / 3))
+        cols: int = 3 if len(n_neighbors) > 3 else len(n_neighbors)
+
+        fig_height: float = rows * 5
+        fig_width: float = 18
+
+        fig, ax = plt.subplots(rows, cols, figsize=(fig_width, fig_height))
+
+        for i, n in enumerate(n_neighbors):
+            if len(n_neighbors) > 3:
+                current_ax = ax[i // 3, i % 3]
+            elif len(n_neighbors) > 1:
+                current_ax = ax[i]
+            else:
+                current_ax = ax
+
+            nn = NearestNeighbors(n_neighbors=n, algorithm='ball_tree')
+            nn.fit(np.vstack([ra, de]).T)
+
+            distances, indices = nn.kneighbors()
+
+            print("blabla", distances.shape)
+
+            #print(np.sort(distances[:, -1]))
+
+            density = 1 / (np.pi * distances[:, -1] ** 2)
+
+            current_ax.hist(density, bins=bins, alpha=0.6, color='darkblue')
+            current_ax.set_title(f'Nearest neighbor estimation for n = {n}', fontsize=18)
+            current_ax.set_xlabel('Density', fontsize=12)
+            current_ax.set_ylabel('Frequency', fontsize=12)
+
+
+        save_path: str | None = kwargs.get('save_path', None)
+
+        if save_path is not None:
+            if not os.path.exists(os.path.dirname(save_path)):
+                raise FileNotFoundError(f"Path {save_path} does not exist")
+
+            print('Save figure to:', save_path)
+            plt.savefig(save_path, bbox_inches='tight')
+        else:
+            plt.show()
+
+    def delaunay_triangulation(self, use_standardized_vals: bool = True, **kwargs) -> None:
+        """
+        Delaunay triangulation.
+
+        :param use_standardized_vals:
+        :param kwargs:
+        :return:
+        """
+
+        plt.style.use(['science', 'ieee', 'no-latex'])
+
+        # Check whether to use standardized values without dimension or not
+        if use_standardized_vals:
+
+            if self._ra_standardized is None or self._de_standardized is None:
+                self._standardize_coordinates()
+
+            ra = self._ra_standardized
+            de = self._de_standardized
+            unit = '-'
+        else:
+            ra = self.ra
+            de = self.de
+            unit = 'deg'
+
+        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+        ax.triplot(ra, de, 'go-', lw=0.4, markersize=0.3, alpha=0.6)
+        ax.set_title('Delaunay Triangulation', fontsize=20)
+        ax.set_xlabel(f'RA [{unit}]', fontsize=15)
+        ax.set_ylabel(f'DEC [{unit}]', fontsize=15)
+
+        save_path: str | None = kwargs.get('save_path', None)
+
+        if save_path is not None:
+            if not os.path.exists(os.path.dirname(save_path)):
+                raise FileNotFoundError(f"Path {save_path} does not exist")
+
+            print('Save figure to:', save_path)
+            plt.savefig(save_path, bbox_inches='tight')
+        else:
+            plt.show()
+
+    def voroni_volumes(self, use_standardized_vals: bool = True, **kwargs) -> None:
+        """
+        Voronoi diagram.
+
+        :param use_standardized_vals:
+        :param kwargs:
+        :return:
+        """
+
+        plt.style.use(['science', 'ieee', 'no-latex'])
+
+        # Check whether to use standardized values without dimension or not
+        if use_standardized_vals:
+
+            if self._ra_standardized is None or self._de_standardized is None:
+                self._standardize_coordinates()
+
+            ra = self._ra_standardized
+            de = self._de_standardized
+            unit = '-'
+        else:
+            ra = self.ra
+            de = self.de
+            unit = 'deg'
+
+        vor = Voronoi(np.vstack([ra, de]).T)
+        volumes = _compute_voronoi_volumes(vor) # Not used
+
+        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+        voronoi_plot_2d(vor, ax=ax, show_vertices=False, line_colors='darkblue', line_width=0.4, line_alpha=0.6, point_size=0.5)
+        ax.set_title('Voronoi Diagram', fontsize=20)
+        ax.set_xlabel(f'RA {unit}', fontsize=15)
+        ax.set_ylabel(f'DEC [deg] {unit}', fontsize=15)
+
+        save_path: str | None = kwargs.get('save_path', None)
+
+        if save_path is not None:
+            if not os.path.exists(os.path.dirname(save_path)):
+                raise FileNotFoundError(f"Path {save_path} does not exist")
+
+            print('Save figure to:', save_path)
+            plt.savefig(save_path, bbox_inches='tight')
+        else:
+            plt.show()
+
+
+    def kernel_density_estimation(self,
+                                  bandwidths: np.ndarray,
+                                  n_bins: int = 50,
+                                  use_standardizes_vals: bool = True,
+                                  **kwargs) -> None:
+        """
+        Kernel density estimation.
+
+        :param bandwidths: (np.ndarray) Bandwidths
+        :param n_bins: (int) Number of bins
+        :param use_standardizes_vals: (bool) Standardize values
+        :param kwargs: Additional arguments
+        :return: None
+        """
+
+        plt.style.use(['science', 'ieee', 'no-latex'])
+
+        # Check whether to use standardized values without dimension or not
+        if use_standardizes_vals:
+            self._standardize_coordinates()
+
+            ra = self._ra_standardized
+            de = self._de_standardized
+            unit = '-'
+        else:
+            ra = self.ra
+            de = self.de
+            unit = 'deg'
+
+        x_min, x_max = np.min(ra), np.max(ra)
+        y_min, y_max = np.min(de), np.max(de)
+
+        x, y = np.meshgrid(np.linspace(x_min, x_max, n_bins), np.linspace(y_min, y_max, n_bins))
+
+        rows: int = int(np.ceil(len(bandwidths) / 3))
+        cols: int = 3 if len(bandwidths) > 3 else len(bandwidths)
+
+        fig_height: float = rows * 5
+        fig_width: float = 18
+
+        fig, ax = plt.subplots(rows, cols, figsize=(fig_width, fig_height))
+
+        for i, bw in enumerate(bandwidths):
+            if len(bandwidths) > 3:
+                current_ax = ax[i // 3, i % 3]
+            elif len(bandwidths) > 1:
+                current_ax = ax[i]
+            else:
+                current_ax = ax
+
+            kde = KernelDensity(kernel='gaussian', bandwidth=bw)
+            kde.fit(np.vstack([ra, de]).T)
+
+            z = np.exp(kde.score_samples(np.vstack([x.ravel(), y.ravel()]).T))
+            z = z.reshape(x.shape)
+
+            contour = current_ax.contourf(x, y, z, cmap='viridis')
+            current_ax.set_title(f'Bandwidth = {bw}', fontsize=18)
+            current_ax.set_xlabel(f'RA [{unit}]', fontsize=12)
+            current_ax.set_ylabel(f'DEC [{unit}]', fontsize=12)
+
+            cbar = fig.colorbar(contour, ax=current_ax)
+            cbar.set_label('Density', fontsize=12)
+
 
         save_path: str | None = kwargs.get('save_path', None)
 
@@ -535,4 +784,5 @@ class SDSS:
 
 
 if __name__ == "__main__":
+
     pass
