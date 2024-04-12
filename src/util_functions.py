@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from scipy.spatial import ConvexHull
 import numpy as np
 from scipy.spatial import Voronoi
+from dataclasses import dataclass
 
 
 def process_plot(plot: plt, save_path: str | None = None) -> None:
@@ -21,6 +22,7 @@ def process_plot(plot: plt, save_path: str | None = None) -> None:
     else:
         plot.show()
 
+
 def _compute_voronoi_volumes(v: Voronoi):
     """
     Compute the volume of the voronoi cells.
@@ -37,3 +39,26 @@ def _compute_voronoi_volumes(v: Voronoi):
         else:
             vol[i] = ConvexHull(v.vertices[indices]).volume
     return vol
+
+
+@dataclass
+class Subplot:
+
+    height: float
+    width: float
+
+    figure: plt.Figure
+    axes: plt.Axes
+
+
+def _create_subplots(n_subplots: int):
+
+    rows: int = int(np.ceil(n_subplots / 3))
+    cols: int = 3 if n_subplots > 3 else n_subplots
+
+    fig_height: float = rows * 5
+    fig_width: float = 18
+
+    fig, ax = plt.subplots(rows, cols, figsize=(fig_width, fig_height))
+
+    return Subplot(height=fig_height, width=fig_width, figure=fig, axes=ax)
