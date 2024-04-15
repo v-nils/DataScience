@@ -9,7 +9,7 @@ from src.data_models import SDSS, compute_percentiles
 ########################################
 
 # Here we define the tasks that we want to run
-tasks = ['3']
+tasks = ['5']
 
 # Load SDSS as class
 sdss = SDSS(pd.read_csv('../data/raw_data/sdss_cutout.csv'))
@@ -86,7 +86,7 @@ if '3' in tasks:
                      save_path=save_path_kde_std,
                      method='both',
                      plot_one_point_stats=True)
-
+## Plot mit achsenbeschriftung
 
 ########################################
 # TASK 4
@@ -109,5 +109,8 @@ if '5' in tasks:
     save_path_ks_quantiles = '../data/results/ex_02/ks/ks_quantiles.png'
 
     results = sdss.kolmogorov_smirnoff(n_bins=50, bandwidths=0.75,  n_slices=1, method='mass',
-                                       plot=False, use_standardized_vals=False)
+                                       plot=False, use_standardized_vals=True)
     compute_percentiles(*results, save_path=save_path_ks_quantiles)
+
+
+## Plots Algemein

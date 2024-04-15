@@ -209,7 +209,7 @@ def _plot_kde(kde_results: dict,
 
     for i, z in enumerate(kde_results['densities']):
         inner_plot = gridspec.GridSpecFromSubplotSpec(number_of_subplot_rows, 1, subplot_spec=outer_plot[i], wspace=0.2,
-                                                      hspace=0.4, height_ratios=height_ratio)
+                                                      hspace=0.4)
         if method in ['volume', 'mass']:
             current_ax = fig.add_subplot(inner_plot[0])
 
@@ -227,10 +227,11 @@ def _plot_kde(kde_results: dict,
 
             if plot_one_point_stats:
                 current_ax = fig.add_subplot(inner_plot[1])
-                current_ax.hist(z.ravel(), bins=bins, alpha=0.6, color='darkblue')
+                current_ax.hist(z.ravel(), bins=bins, alpha=0.6, color='darkblue', label='Blue Galaxies')
                 current_ax.set_title('Density Histogram', fontsize=12)
                 current_ax.set_xlabel('Density', fontsize=12)
                 current_ax.set_ylabel('Frequency', fontsize=12)
+                current_ax.legend()
 
         else:
             for z_idx, z_vals in enumerate(z):
@@ -252,13 +253,14 @@ def _plot_kde(kde_results: dict,
 
             if plot_one_point_stats:
                 current_ax = fig.add_subplot(inner_plot[2])
-                current_ax.hist(z[1].ravel(), bins=bins, alpha=0.6, color='darkred')
-                current_ax.hist(z[0].ravel(), bins=bins, alpha=0.6, color='darkblue')
+                current_ax.hist(z[1].ravel(), bins=bins, alpha=0.6, color='darkred', label='Red galaxies')
+                current_ax.hist(z[0].ravel(), bins=bins, alpha=0.6, color='darkblue', label='Blue galaxies')
                 sns.kdeplot(z[1].ravel(), ax=current_ax, color='darkred')
                 sns.kdeplot(z[0].ravel(), ax=current_ax, color='darkblue')
                 current_ax.set_title('Density Histogram', fontsize=12)
                 current_ax.set_xlabel('Density', fontsize=12)
                 current_ax.set_ylabel('Frequency', fontsize=12)
+                current_ax.legend()
 
     process_plot(plt, kwargs.get('save_path', None))
 
@@ -314,7 +316,14 @@ def compute_percentiles(results_red, results_blue, percentiles: None | list[int]
     n_bins = kwargs.get('n_bins', 20)
     lower, upper = np.percentile(np.concatenate([results_red, results_blue]), percentiles)
 
-    print(f"Percentiles: {percentiles}, Lower: {lower}, Upper: {upper}")
+    print('****************************************************************************************')
+    print('****                       Starting Percentile Estimation                           ')
+    print('****  Parameters:                                                                   ')
+    print('****    - Percentiles:', percentiles, '                                             ')
+    print('****    - Bins:', n_bins, '                                                        ')
+    print('****    - Lower:', lower, '                                                        ')
+    print('****    - Upper:', upper, '                                                        ')
+    print('****    - Additional arguments:', kwargs, '                                         ')
 
     r_low = results_red[results_red <= lower]
     r_up = results_red[results_red > upper]
@@ -608,6 +617,7 @@ class SDSS:
             ra = self.ra
             de = self.de
 
+        print(np.mean(ra), de)
         plots = _create_subplots(len(n_neighbors))
 
         for i, n in enumerate(n_neighbors):
@@ -625,6 +635,16 @@ class SDSS:
             distances = distances[:, -1]
             distances[distances == 0] = 1e-10
             density = 1 / (np.pi * distances ** 2)
+
+            print('***********************************************')
+            print('****  Nearest Neighbor Estimation Results    ')
+            print('****  Neighbors:', n)
+            print('****  Density mean:', np.mean(density))
+            print('****  Density std:', np.std(density))
+            print('****  Density min:', np.min(density))
+            print('****  Density max:', np.max(density))
+            print('****  Density median:', np.median(density))
+            print('***********************************************')
 
             current_ax.hist(density, bins=bins, histtype='step', color='darkblue', lw=1.5)
             current_ax.set_title(f'Nearest neighbor estimation for n = {n}', fontsize=18)
@@ -808,8 +828,18 @@ class SDSS:
 
             densities.append(dens)
 
+            print(f'****  Kernel Density Estimation Results for Bandwidth = {bw}:                                          ')
+            print('****    - Mean:', np.mean(dens), '                                           ')
+            print('****    - Std:', np.std(dens), '                                            ')
+            print('****    - Min:', np.min(dens), '                                            ')
+            print('****    - Max:', np.max(dens), '                                            ')
+            print('****    - Median:', np.median(dens), '                                      ')
+            print('****************************************************************************************')
+
         results = {'x': x_values, 'y': y_values, 'densities': densities, 'unit': unit,
                    'bandwidths': bandwidths}
+
+
         if plot:
             _plot_kde(results, method=str(method), **kwargs)
 
@@ -875,8 +905,8 @@ class SDSS:
             red_densities = np.concatenate([res['densities'].ravel() for res in red_results])
             blue_densities = np.concatenate([res['densities'].ravel() for res in blue_results])
         else:
-            red_densities = np.array([res['densities'][0].ravel() for res in red_results]).ravel()
-            blue_densities = np.array([res['densities'][0].ravel() for res in blue_results]).ravel()
+            red_densities = np.array([np.array(res['densities'][0]).ravel() for res in red_results]).ravel()
+            blue_densities = np.array([np.array(res['densities'][0]).ravel() for res in blue_results]).ravel()
 
         _evaluate_kde(red_densities, blue_densities, **kwargs)
 
