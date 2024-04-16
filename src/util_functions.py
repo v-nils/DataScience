@@ -6,6 +6,25 @@ from scipy.spatial import Voronoi
 from dataclasses import dataclass
 
 
+def _print_kde_results(densities: list, bandwidth: float, method: str) -> None:
+    if len(densities) == 1:
+        _print_results(densities, method, bandwidth)
+    else:
+        _print_results(densities[0], 'Volume', bandwidth)
+        print('****')
+        _print_results(densities[0], 'Mass', bandwidth)
+
+
+def _print_results(densities: list, method: str, bandwidth: float) -> None:
+    print(f'****  {method}-KDE results for bandwidth = {bandwidth}:')
+    print('****    - Mean:', np.mean(densities))
+    print('****    - Std:', np.std(densities))
+    print('****    - Min:', np.min(densities))
+    print('****    - Max:', np.max(densities))
+    print('****    - Median:', np.median(densities))
+    print('****************************************************************************************')
+
+
 def process_plot(plot: plt, save_path: str | None = None) -> None:
     """
     Save the plot to the specified path, or display it, based on the value of save_path.
