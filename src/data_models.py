@@ -18,11 +18,11 @@ import matplotlib.colors as mcolors
 from sklearn.neighbors import KernelDensity, NearestNeighbors
 from scipy.spatial import Voronoi, voronoi_plot_2d
 from scipy.spatial import ConvexHull
-from src.util_functions import _compute_voronoi_volumes, process_plot, _create_subplots
+from src.util_functions import _compute_voronoi_volumes, process_plot, _create_subplots, _print_kde_results
 import matplotlib.gridspec as gridspec
 from scipy.stats import ks_2samp, ksone
 import matplotlib as mpl
-from matplotlib import cm
+from matplotlib import cm, colors
 
 # Global settings
 matplotlib.rcParams['pdf.fonttype'] = 42
@@ -30,15 +30,19 @@ matplotlib.rcParams['ps.fonttype'] = 42
 
 
 def _evaluate_kde(var_1, var_2, plot: bool = True, **kwargs) -> np.array:
-    ks_statistic, p_value = ks_2samp(var_1, var_2)
 
+    _v1 = np.concatenate([w.flatten() for w in [v.flatten() for v in var_1]])
+    _v2 = np.concatenate([w.flatten() for w in [v.flatten() for v in var_2]])
+    _v1_shape = [v.shape for v in var_1]
+    _v1_max_shape = max(_v1_shape)
+    ks_statistic, p_value = ks_2samp(_v1, _v2)
     alpha = 0.05
-    n1 = len(var_1)
-    n2 = len(var_2)
+    n1 = len(_v1)
+    n2 = len(_v2)
     critical_value = ksone.ppf(1 - alpha / 2, n1 + n2)
 
     if not plot:
-        return var_1, var_2
+        return _v1, _v2
 
     if critical_value < ks_statistic:
         print("Critical value:", critical_value, "KS Test:", ks_statistic)
@@ -63,7 +67,7 @@ def _evaluate_kde(var_1, var_2, plot: bool = True, **kwargs) -> np.array:
              f'at 95% significance level bc c <= ks\n'
              f'Null hypothesis is {"accepted" if critical_value < p_value else "rejected"} according to p-value')
 
-    _plot_ks([var_1], [var_2], title=title, **kwargs)
+    _plot_ks(var_1, var_2, title=title, **kwargs)
 
     return title
 
@@ -188,35 +192,46 @@ def _plot_kde(kde_results: dict,
 
     plt.style.use(['science', 'ieee', 'no-latex'])
 
+    gamma = 0.7
     add_stats = 1 if plot_one_point_stats else 0
 
     number_of_rows: int = int(np.ceil(len(kde_results['bandwidths']) / 3))
     number_of_cols: int = 3 if len(kde_results['bandwidths']) > 3 else len(kde_results['bandwidths'])
 
-    number_of_subplot_rows: int = len(kde_results['densities']) + add_stats
+    number_of_subplot_rows: int = len(kde_results['densities'][0]) + add_stats
 
     figure_height: float = 5 * number_of_subplot_rows * number_of_rows * 0.8
     fig = plt.figure(figsize=(15, figure_height))
 
     outer_plot = gridspec.GridSpec(number_of_rows, number_of_cols, wspace=0.3, hspace=0.3)
 
-    if method == 'both' and plot_one_point_stats:
-        height_ratio = [item for _ in range(number_of_subplot_rows) for item in (2, 2, 1)]
-    elif plot_one_point_stats:
-        height_ratio = [item for _ in range(number_of_subplot_rows) for item in (2, 1)]
+    if number_of_subplot_rows == 3:
+        height_ratio = (2, 2, 1)
+    elif number_of_subplot_rows == 2:
+        height_ratio = (2, 1)
     else:
-        height_ratio = [item for _ in range(number_of_subplot_rows) for item in (1,)]
+        height_ratio = (1,)
+
+    assert number_of_subplot_rows == len(height_ratio), \
+        'Height ratio must have the same length as the number of inner subplot-rows'
 
     for i, z in enumerate(kde_results['densities']):
-        inner_plot = gridspec.GridSpecFromSubplotSpec(number_of_subplot_rows, 1, subplot_spec=outer_plot[i], wspace=0.2,
-                                                      hspace=0.4)
+        inner_plot = gridspec.GridSpecFromSubplotSpec(number_of_subplot_rows, 1,
+                                                      subplot_spec=outer_plot[i], wspace=0.2,
+                                                      hspace=0.4, height_ratios=height_ratio)
         if method in ['volume', 'mass']:
             current_ax = fig.add_subplot(inner_plot[0])
 
             if method == 'mass':
-                contour = current_ax.contourf(kde_results['x'][i], kde_results['y'][i], z, cmap='viridis')
+                contour = current_ax.contourf(kde_results['x'][i],
+                                              kde_results['y'][i],
+                                              z,
+                                              cmap='magma', norm=colors.PowerNorm(gamma))
             else:
-                contour = current_ax.scatter(kde_results['x'][i], kde_results['y'][i], c=z, cmap='viridis', s=0.5,alpha=0.5)
+                contour = current_ax.tricontourf(kde_results['x'][i],
+                                                 kde_results['y'][i],
+                                                 z,
+                                                 cmap='magma', s=0.5, alpha=0.5, norm=colors.PowerNorm(gamma))
 
             current_ax.set_title(f'Bandwidth = {kde_results["bandwidths"][i]}', fontsize=12)
             current_ax.set_xlabel(f'RA [{kde_results["unit"]}]', fontsize=12)
@@ -227,10 +242,11 @@ def _plot_kde(kde_results: dict,
 
             if plot_one_point_stats:
                 current_ax = fig.add_subplot(inner_plot[1])
-                current_ax.hist(z.ravel(), bins=bins, alpha=0.6, color='darkblue', label='Blue Galaxies')
+                current_ax.hist(z.ravel(), bins=bins, histtype='step', color='darkblue', label='Blue Galaxies')
                 current_ax.set_title('Density Histogram', fontsize=12)
-                current_ax.set_xlabel('Density', fontsize=12)
-                current_ax.set_ylabel('Frequency', fontsize=12)
+                current_ax.set_xlabel('Density', fontsize=8)
+                current_ax.set_ylabel('Frequency', fontsize=8)
+                current_ax.set_yscale('log')
                 current_ax.legend()
 
         else:
@@ -238,10 +254,15 @@ def _plot_kde(kde_results: dict,
                 current_ax = fig.add_subplot(inner_plot[z_idx])
 
                 if z_idx == 0:
-                    contour = current_ax.contourf(kde_results['x'][i][z_idx], kde_results['y'][i][z_idx], z_vals,
-                                                  cmap='magma')
+                    contour = current_ax.contourf(kde_results['x'][i][z_idx],
+                                                  kde_results['y'][i][z_idx],
+                                                  z_vals,
+                                                  cmap='magma', norm=colors.PowerNorm(gamma))
                 else:
-                    contour = current_ax.tricontourf(kde_results['x'][i][z_idx], kde_results['y'][i][z_idx], z_vals, cmap='magma')
+                    contour = current_ax.tricontourf(kde_results['x'][i][z_idx],
+                                                     kde_results['y'][i][z_idx],
+                                                     z_vals,
+                                                     cmap='magma', norm=colors.PowerNorm(gamma))
 
                 current_ax.set_title(f'{'Volume-' if z_idx == 0 else 'Mass-'}KDE with Bandwidth = '
                                      f'{kde_results["bandwidths"][i]}', fontsize=12)
@@ -253,10 +274,9 @@ def _plot_kde(kde_results: dict,
 
             if plot_one_point_stats:
                 current_ax = fig.add_subplot(inner_plot[2])
-                current_ax.hist(z[1].ravel(), bins=bins, alpha=0.6, color='darkred', label='Red galaxies')
-                current_ax.hist(z[0].ravel(), bins=bins, alpha=0.6, color='darkblue', label='Blue galaxies')
-                sns.kdeplot(z[1].ravel(), ax=current_ax, color='darkred')
-                sns.kdeplot(z[0].ravel(), ax=current_ax, color='darkblue')
+                current_ax.hist(z[1].ravel(), bins=bins, histtype='step', color='darkred', label='Red galaxies')
+                current_ax.hist(z[0].ravel(), bins=bins, histtype='step', color='darkblue', label='Blue galaxies')
+                current_ax.set_yscale('log')
                 current_ax.set_title('Density Histogram', fontsize=12)
                 current_ax.set_xlabel('Density', fontsize=12)
                 current_ax.set_ylabel('Frequency', fontsize=12)
@@ -266,6 +286,7 @@ def _plot_kde(kde_results: dict,
 
 
 def _plot_ks(results_red: list[list[float] | dict], results_blue: list[list[float] | dict], **kwargs) -> None:
+
     plt.style.use(['science', 'ieee', 'no-latex'])
 
     kde_per_subplot: int = kwargs.get('kde_per_subplot', 3)
@@ -273,7 +294,21 @@ def _plot_ks(results_red: list[list[float] | dict], results_blue: list[list[floa
 
     title: str = kwargs.get('title', 'Kolmogorov-Smirnov Test')
 
-    n_rows: int = int((np.ceil(len(results_red)) // kde_per_subplot) + 1)
+    n_rows: int = int((np.ceil(len(results_red)) // kde_per_subplot))
+
+    if kwargs.get('plot_log', False):
+
+        print('****************************************************************************************')
+        print('****                       Plotting Kolmogorov-Smirnov Test                           ')
+        print('****  Parameters:                                                                   ')
+        print('****    - Results Red:', len(results_red), '                                             ')
+        print('****    - Results Blue:', len(results_blue), '                                           ')
+        print('****    - Additional arguments:', kwargs, '                                         ')
+        print('****    - Number of rows:', n_rows, '                                           ')
+        print('****    - Number of subplots:', kde_per_subplot, '                                           ')
+        print('****    - Number of bins:', n_bins, '                                           ')
+        print('****    - Title:', title, '                                           ')
+        print('****************************************************************************************')
 
     if n_rows == 1:
         fig, ax = plt.subplots(1, 2, figsize=(15, 3.2))
@@ -298,14 +333,13 @@ def _plot_ks(results_red: list[list[float] | dict], results_blue: list[list[floa
         current_ax_red.set_xlim([min(np.concatenate([red, blue])), max(np.concatenate([red, blue]))])
         current_ax_blue.set_xlim([min(np.concatenate([red, blue])), max(np.concatenate([red, blue]))])
 
-
     for a in ax.flat:
         a.set_xlabel('Density', fontsize=8)
         a.set_ylabel('Frequency', fontsize=8)
         a.set_yscale('log')
         a.legend()
 
-    fig.suptitle(title, fontsize=14)
+    fig.suptitle(title, fontsize=10)
     process_plot(plt, kwargs.get('save_path', None))
 
 
@@ -811,34 +845,27 @@ class SDSS:
             kde.fit(np.vstack([ra, de]).T)
 
             if method == 'volume':
-                dens = np.exp(kde.score_samples(np.vstack([x.ravel(), y.ravel()]).T))
-                dens = dens.reshape(x.shape)
+                d: np.ndarray = np.exp(kde.score_samples(np.vstack([x.ravel(), y.ravel()]).T))
+                dens: list = [d.reshape(x.shape)]
                 x_values.append(x)
                 y_values.append(y)
             elif method == 'mass':
-                dens = np.exp(kde.score_samples(np.vstack([ra, de]).T))
+                dens: list = [np.exp(kde.score_samples(np.vstack([ra, de]).T))]
                 x_values.append(ra)
                 y_values.append(de)
             else:
                 x_y = np.exp(kde.score_samples(np.vstack([x.ravel(), y.ravel()]).T))
                 ra_dec = np.exp(kde.score_samples(np.vstack([ra, de]).T))
-                dens = [np.array(x_y.reshape(x.shape)), np.array(ra_dec)]
+                dens: list = [np.array(x_y.reshape(x.shape)), np.array(ra_dec)]
                 x_values.append([x, ra])
                 y_values.append([y, de])
 
-            densities.append(dens)
+            _print_kde_results(dens, bw, method)
 
-            print(f'****  Kernel Density Estimation Results for Bandwidth = {bw}:                                          ')
-            print('****    - Mean:', np.mean(dens), '                                           ')
-            print('****    - Std:', np.std(dens), '                                            ')
-            print('****    - Min:', np.min(dens), '                                            ')
-            print('****    - Max:', np.max(dens), '                                            ')
-            print('****    - Median:', np.median(dens), '                                      ')
-            print('****************************************************************************************')
+            densities.append(dens)
 
         results = {'x': x_values, 'y': y_values, 'densities': densities, 'unit': unit,
                    'bandwidths': bandwidths}
-
 
         if plot:
             _plot_kde(results, method=str(method), **kwargs)
@@ -902,8 +929,8 @@ class SDSS:
             blue_results.append(results_blue)
 
         if method == 'mass':
-            red_densities = np.concatenate([res['densities'].ravel() for res in red_results])
-            blue_densities = np.concatenate([res['densities'].ravel() for res in blue_results])
+            red_densities = [np.array(r).ravel() for r in [res['densities'] for res in red_results]]
+            blue_densities = [np.array(r).ravel() for r in [res['densities'] for res in blue_results]]
         else:
             red_densities = np.array([np.array(res['densities'][0]).ravel() for res in red_results]).ravel()
             blue_densities = np.array([np.array(res['densities'][0]).ravel() for res in blue_results]).ravel()
