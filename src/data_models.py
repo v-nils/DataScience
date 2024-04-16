@@ -1,6 +1,11 @@
+from typing import Tuple, Any
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+from numba.np.arraymath import np_all
+from numpy import ndarray, dtype
+
 from src.math_functions import compute_angles, landy_szalay
 import seaborn as sns
 from numba import jit
@@ -14,12 +19,53 @@ from sklearn.neighbors import KernelDensity, NearestNeighbors
 from scipy.spatial import Voronoi, voronoi_plot_2d
 from scipy.spatial import ConvexHull
 from src.util_functions import _compute_voronoi_volumes, process_plot, _create_subplots
-
+import matplotlib.gridspec as gridspec
+from scipy.stats import ks_2samp, ksone
+import matplotlib as mpl
+from matplotlib import cm
 
 # Global settings
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
 
+
+def _evaluate_kde(var_1, var_2, plot: bool = True, **kwargs) -> np.array:
+    ks_statistic, p_value = ks_2samp(var_1, var_2)
+
+    alpha = 0.05
+    n1 = len(var_1)
+    n2 = len(var_2)
+    critical_value = ksone.ppf(1 - alpha / 2, n1 + n2)
+
+    if not plot:
+        return var_1, var_2
+
+    if critical_value < ks_statistic:
+        print("Critical value:", critical_value, "KS Test:", ks_statistic)
+        print(
+            "Nullhypothesis is rejected at 95% significance level bc c >= ks, meaning the two samples are not "
+            "drawn from the same distribution. There is a statistically significant difference between the "
+            "distributions of the red and blue galaxies' densities")
+    else:
+        print("Critical value:", critical_value, "KS Test:", ks_statistic)
+        print(
+            "Nullhypothesis is accepted at 95% significance level bc c <= ks meaning the two samples are drawn "
+            "from the same distribution")
+
+    if critical_value < p_value:
+        print(f"Accept Nullhypothesis according to p-value: {p_value}")
+    else:
+        print(f"Reject the null hypothesis according to p-value: {p_value}")
+
+    title = (f'Kolmogorov-Smirnov Test\n '
+             f'Critical Value: {critical_value:.4f}, KS Test: {ks_statistic:.4f}, p-value: {p_value:.4f}\n'
+             f'Null hypothesis is {"rejected" if critical_value < ks_statistic else "accepted"} '
+             f'at 95% significance level bc c <= ks\n'
+             f'Null hypothesis is {"accepted" if critical_value < p_value else "rejected"} according to p-value')
+
+    _plot_ks([var_1], [var_2], title=title, **kwargs)
+
+    return title
 
 def _statistics(data: np.array, alpha: float = 0.95) -> dict[str, np.array]:
     """
@@ -126,6 +172,190 @@ def _plot_correlation_fun(omega: np.array,
     plt.show()
 
 
+def _plot_kde(kde_results: dict,
+              method: str,
+              plot_one_point_stats: bool = False,
+              bins: int = 20,
+              **kwargs) -> None:
+    """
+    Plot Kernel Density Estimation.
+
+    :param kde_results: (dict) Dictionary containing x, y, z values and unit for plotting
+    :param plot_stats: (bool) Whether to plot statistics or not
+    :param kwargs: Additional arguments
+    :return: None
+    """
+
+    plt.style.use(['science', 'ieee', 'no-latex'])
+
+    add_stats = 1 if plot_one_point_stats else 0
+
+    number_of_rows: int = int(np.ceil(len(kde_results['bandwidths']) / 3))
+    number_of_cols: int = 3 if len(kde_results['bandwidths']) > 3 else len(kde_results['bandwidths'])
+
+    number_of_subplot_rows: int = len(kde_results['densities']) + add_stats
+
+    figure_height: float = 5 * number_of_subplot_rows * number_of_rows * 0.8
+    fig = plt.figure(figsize=(15, figure_height))
+
+    outer_plot = gridspec.GridSpec(number_of_rows, number_of_cols, wspace=0.3, hspace=0.3)
+
+    if method == 'both' and plot_one_point_stats:
+        height_ratio = [item for _ in range(number_of_subplot_rows) for item in (2, 2, 1)]
+    elif plot_one_point_stats:
+        height_ratio = [item for _ in range(number_of_subplot_rows) for item in (2, 1)]
+    else:
+        height_ratio = [item for _ in range(number_of_subplot_rows) for item in (1,)]
+
+    for i, z in enumerate(kde_results['densities']):
+        inner_plot = gridspec.GridSpecFromSubplotSpec(number_of_subplot_rows, 1, subplot_spec=outer_plot[i], wspace=0.2,
+                                                      hspace=0.4)
+        if method in ['volume', 'mass']:
+            current_ax = fig.add_subplot(inner_plot[0])
+
+            if method == 'mass':
+                contour = current_ax.contourf(kde_results['x'][i], kde_results['y'][i], z, cmap='viridis')
+            else:
+                contour = current_ax.scatter(kde_results['x'][i], kde_results['y'][i], c=z, cmap='viridis', s=0.5,alpha=0.5)
+
+            current_ax.set_title(f'Bandwidth = {kde_results["bandwidths"][i]}', fontsize=12)
+            current_ax.set_xlabel(f'RA [{kde_results["unit"]}]', fontsize=12)
+            current_ax.set_ylabel(f'DEC [{kde_results["unit"]}]', fontsize=12)
+
+            cbar = fig.colorbar(contour, ax=current_ax)
+            cbar.set_label('Density', fontsize=12)
+
+            if plot_one_point_stats:
+                current_ax = fig.add_subplot(inner_plot[1])
+                current_ax.hist(z.ravel(), bins=bins, alpha=0.6, color='darkblue', label='Blue Galaxies')
+                current_ax.set_title('Density Histogram', fontsize=12)
+                current_ax.set_xlabel('Density', fontsize=12)
+                current_ax.set_ylabel('Frequency', fontsize=12)
+                current_ax.legend()
+
+        else:
+            for z_idx, z_vals in enumerate(z):
+                current_ax = fig.add_subplot(inner_plot[z_idx])
+
+                if z_idx == 0:
+                    contour = current_ax.contourf(kde_results['x'][i][z_idx], kde_results['y'][i][z_idx], z_vals,
+                                                  cmap='magma')
+                else:
+                    contour = current_ax.tricontourf(kde_results['x'][i][z_idx], kde_results['y'][i][z_idx], z_vals, cmap='magma')
+
+                current_ax.set_title(f'{'Volume-' if z_idx == 0 else 'Mass-'}KDE with Bandwidth = '
+                                     f'{kde_results["bandwidths"][i]}', fontsize=12)
+                current_ax.set_xlabel(f'RA [{kde_results["unit"]}]', fontsize=12)
+                current_ax.set_ylabel(f'DEC [{kde_results["unit"]}]', fontsize=12)
+
+                cbar = fig.colorbar(contour, ax=current_ax)
+                cbar.set_label('Density', fontsize=12)
+
+            if plot_one_point_stats:
+                current_ax = fig.add_subplot(inner_plot[2])
+                current_ax.hist(z[1].ravel(), bins=bins, alpha=0.6, color='darkred', label='Red galaxies')
+                current_ax.hist(z[0].ravel(), bins=bins, alpha=0.6, color='darkblue', label='Blue galaxies')
+                sns.kdeplot(z[1].ravel(), ax=current_ax, color='darkred')
+                sns.kdeplot(z[0].ravel(), ax=current_ax, color='darkblue')
+                current_ax.set_title('Density Histogram', fontsize=12)
+                current_ax.set_xlabel('Density', fontsize=12)
+                current_ax.set_ylabel('Frequency', fontsize=12)
+                current_ax.legend()
+
+    process_plot(plt, kwargs.get('save_path', None))
+
+
+def _plot_ks(results_red: list[list[float] | dict], results_blue: list[list[float] | dict], **kwargs) -> None:
+    plt.style.use(['science', 'ieee', 'no-latex'])
+
+    kde_per_subplot: int = kwargs.get('kde_per_subplot', 3)
+    n_bins: int = kwargs.get('n_bins', 5)
+
+    title: str = kwargs.get('title', 'Kolmogorov-Smirnov Test')
+
+    n_rows: int = int((np.ceil(len(results_red)) // kde_per_subplot) + 1)
+
+    if n_rows == 1:
+        fig, ax = plt.subplots(1, 2, figsize=(15, 3.2))
+    else:
+        fig, ax = plt.subplots(n_rows, 2, figsize=(15, n_rows * 3.2))
+        fig.subplots_adjust(hspace=0.2)
+
+    for i, (current_blue_kde, current_red_kde) in enumerate(zip(results_blue, results_red)):
+
+        if isinstance(current_red_kde, dict):
+            red = current_red_kde['densities'][:, 0].ravel() if current_red_kde['densities'].shape[0] == 1 else current_red_kde['densities'][0].ravel()
+            blue = current_blue_kde['densities'][:, 0].ravel() if current_blue_kde['densities'].shape[0] == 1 else current_blue_kde['densities'][0].ravel()
+        else:
+            red = current_red_kde
+            blue = current_blue_kde
+
+        current_ax_red = ax[i // kde_per_subplot, 0] if n_rows > 1 else ax[0]
+        current_ax_blue = ax[i // kde_per_subplot, 1] if n_rows > 1 else ax[1]
+
+        current_ax_red.hist(red, histtype='step', bins=n_bins, label=f'KDE Bin {i}', lw=1)
+        current_ax_blue.hist(blue, histtype='step', bins=n_bins, label=f'KDE Bin {i}', lw=1)
+        current_ax_red.set_xlim([min(np.concatenate([red, blue])), max(np.concatenate([red, blue]))])
+        current_ax_blue.set_xlim([min(np.concatenate([red, blue])), max(np.concatenate([red, blue]))])
+
+
+    for a in ax.flat:
+        a.set_xlabel('Density', fontsize=8)
+        a.set_ylabel('Frequency', fontsize=8)
+        a.set_yscale('log')
+        a.legend()
+
+    fig.suptitle(title, fontsize=14)
+    process_plot(plt, kwargs.get('save_path', None))
+
+
+def compute_percentiles(results_red, results_blue, percentiles: None | list[int] = None, **kwargs) -> None:
+    if percentiles is None:
+        percentiles = [25, 75]
+
+    n_bins = kwargs.get('n_bins', 20)
+    lower, upper = np.percentile(np.concatenate([results_red, results_blue]), percentiles)
+
+    print('****************************************************************************************')
+    print('****                       Starting Percentile Estimation                           ')
+    print('****  Parameters:                                                                   ')
+    print('****    - Percentiles:', percentiles, '                                             ')
+    print('****    - Bins:', n_bins, '                                                        ')
+    print('****    - Lower:', lower, '                                                        ')
+    print('****    - Upper:', upper, '                                                        ')
+    print('****    - Additional arguments:', kwargs, '                                         ')
+
+    r_low = results_red[results_red <= lower]
+    r_up = results_red[results_red > upper]
+    b_low = results_blue[results_blue <= lower]
+    b_up = results_blue[results_blue > upper]
+
+    density = np.concatenate([results_red, results_blue])
+    _evaluate_kde(density[density <= lower], density[density > upper], plot=False, **kwargs)
+
+    plt.style.use(['science', 'ieee', 'no-latex'])
+
+    fig, ax = plt.subplots(1, 2, figsize=(10, 5.5))
+
+    ax[0].hist(r_low, bins=n_bins, color='darkred', histtype='step', label='Red galaxies')
+    ax[0].hist(b_low, bins=n_bins, color='darkblue', histtype='step', label='Blue galaxies')
+    ax[0].set_title(f'{percentiles[0]}-Percentile', fontsize=20)
+    ax[0].set_xlabel('Density', fontsize=15)
+    ax[0].set_ylabel('Frequency', fontsize=15)
+    ax[0].set_xlim([min(np.concatenate([b_low, r_low])), max(np.concatenate([b_low, r_low]))])
+    ax[0].legend()
+
+    ax[1].hist(r_up, bins=n_bins, color='darkred', histtype='step', label='Red galaxies')
+    ax[1].hist(b_up, bins=n_bins, color='darkblue', histtype='step', label='Blue galaxies')
+    ax[1].set_title(f'{percentiles[1]}-Percentile', fontsize=20)
+    ax[1].set_xlabel('Density', fontsize=15)
+    ax[1].set_ylabel('Frequency', fontsize=15)
+    ax[1].set_xlim([min(np.concatenate([b_up, r_up])), max(np.concatenate([b_up, r_up]))])
+    ax[1].legend()
+
+    process_plot(plt, kwargs.get('save_path', None))
+
+
 class SDSS:
     """
     Class for the Sloan Digital Sky Survey (SDSS) data.
@@ -143,11 +373,11 @@ class SDSS:
         self.data: pd.DataFrame = data
 
         # SDSS Parameter extracted
-        self.ra = data.iloc[:, 0]
-        self.de = data.iloc[:, 1]
+        self.ra: np.ndarray = data.iloc[:, 0]
+        self.de: np.ndarray = data.iloc[:, 1]
 
-        self._ra_standardized = None
-        self._de_standardized = None
+        self._ra_standardized: None | np.ndarray = None
+        self._de_standardized: None | np.ndarray = None
 
         self.z_redshift = data.iloc[:, 2]
         self.u = data.iloc[:, 3]
@@ -357,12 +587,21 @@ class SDSS:
         """
         Nearest neighbor estimation.
 
-        :param bins:
+        :param bins: (int=50) Number of bins.
         :param n_neighbors: (np.ndarray) Array of neighbors
-        :param use_standardized_vals: (bool) Standardize values
+        :param use_standardized_vals: (bool=True) Standardize values
         :param kwargs: Additional arguments
         :return: None
         """
+
+        print('****************************************************************************************')
+        print('****                       Starting Nearest Neighbor Estimation                     ')
+        print('****  Parameters:                                                                   ')
+        print('****    - Neighbors:', n_neighbors, '                                               ')
+        print('****    - Bins:', bins, '                                                           ')
+        print('****    - Standardized values:', use_standardized_vals, '                           ')
+        print('****    - Additional arguments:', kwargs, '                                         ')
+
 
         plt.style.use(['science', 'ieee', 'no-latex'])
 
@@ -378,6 +617,7 @@ class SDSS:
             ra = self.ra
             de = self.de
 
+        print(np.mean(ra), de)
         plots = _create_subplots(len(n_neighbors))
 
         for i, n in enumerate(n_neighbors):
@@ -392,22 +632,37 @@ class SDSS:
             nn.fit(np.vstack([ra, de]).T)
 
             distances, indices = nn.kneighbors()
-            density = 1 / (np.pi * distances[:, -1] ** 2)
+            distances = distances[:, -1]
+            distances[distances == 0] = 1e-10
+            density = 1 / (np.pi * distances ** 2)
 
-            current_ax.hist(density, bins=bins, alpha=0.6, color='darkblue')
+            print('***********************************************')
+            print('****  Nearest Neighbor Estimation Results    ')
+            print('****  Neighbors:', n)
+            print('****  Density mean:', np.mean(density))
+            print('****  Density std:', np.std(density))
+            print('****  Density min:', np.min(density))
+            print('****  Density max:', np.max(density))
+            print('****  Density median:', np.median(density))
+            print('***********************************************')
+
+            current_ax.hist(density, bins=bins, histtype='step', color='darkblue', lw=1.5)
             current_ax.set_title(f'Nearest neighbor estimation for n = {n}', fontsize=18)
             current_ax.set_xlabel('Density', fontsize=12)
             current_ax.set_ylabel('Frequency', fontsize=12)
+            current_ax.set_xlim([min(density), max(density)])
+
+            current_ax.set_yscale('log')
 
         process_plot(plt, kwargs.get('save_path', None))
 
     def delaunay_triangulation(self, use_standardized_vals: bool = True, **kwargs) -> None:
         """
-        Delaunay triangulation.
+        Computes and plots Delaunay triangulation.
 
-        :param use_standardized_vals:
-        :param kwargs:
-        :return:
+        :param use_standardized_vals: (bool=True) Uses standardized values.
+        :param kwargs: Additional arguments
+        :return: None
         """
 
         plt.style.use(['science', 'ieee', 'no-latex'])
@@ -436,14 +691,16 @@ class SDSS:
 
     def voroni_volumes(self, use_standardized_vals: bool = True, **kwargs) -> None:
         """
-        Voronoi diagram.
+        Computes and plots Voronoi densities.
 
-        :param use_standardized_vals:
-        :param kwargs:
-        :return:
+        :param use_standardized_vals: (bool=True) Uses standardized values
+        :param kwargs: Additional arguments
+        :return: None
         """
 
         plt.style.use(['science', 'ieee', 'no-latex'])
+
+        plot_colors = kwargs.get('plot_colors', False)
 
         # Check whether to use standardized values without dimension or not
         if use_standardized_vals:
@@ -462,80 +719,198 @@ class SDSS:
         vor = Voronoi(np.vstack([ra, de]).T)
         volumes = _compute_voronoi_volumes(vor)  # Not used
 
-        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+        minima = np.quantile(volumes, 0.01)
+        maxima = np.quantile(volumes, 0.99)
+
+        norm = mpl.colors.Normalize(vmin=minima, vmax=maxima, clip=True)
+        mapper = cm.ScalarMappable(norm=norm, cmap=cm.magma)
+
+        fig, ax = plt.subplots(1, 1, figsize=(8 if not plot_colors else 10, 8))
         voronoi_plot_2d(vor, ax=ax, show_vertices=False, line_colors='darkblue',
-                        line_width=0.4, line_alpha=0.6, point_size=0.5)
+                        line_width=0.4 if not plot_colors else 0.0, line_alpha=0.6, alpha=0.8,
+                        point_size=0.5 if not plot_colors else 0.0)
+        if plot_colors:
+            for r in range(len(vor.point_region)):
+                region = vor.regions[vor.point_region[r]]
+                if not -1 in region:
+                    polygon = [vor.vertices[i] for i in region]
+                    plt.fill(*zip(*polygon), color=mapper.to_rgba(volumes[r]))
+            fig.colorbar(mapper, ax=ax, label='Volume of Voronoi cell', shrink=0.6)
+
         ax.set_title('Voronoi Diagram', fontsize=20)
-        ax.set_xlabel(f'RA {unit}', fontsize=15)
-        ax.set_ylabel(f'DEC [deg] {unit}', fontsize=15)
+        ax.set_xlabel(f'RA [{unit}]', fontsize=15)
+        ax.set_ylabel(f'DEC [{unit}]', fontsize=15)
 
         process_plot(plt, kwargs.get('save_path', None))
 
-    def kernel_density_estimation(self,
-                                  bandwidths: np.ndarray,
-                                  n_bins: int = 50,
-                                  use_standardizes_vals: bool = True,
-                                  **kwargs) -> None:
+    def compute_kde(self,
+                    bandwidths: np.ndarray | float | list,
+                    n_bins: int = 50,
+                    use_standardizes_vals: bool = True,
+                    method: str = 'volume',
+                    plot: bool = True,
+                    **kwargs) -> dict:
         """
-        Kernel density estimation.
+        Compute Kernel Density Estimation.
 
         :param bandwidths: (np.ndarray) Bandwidths
         :param n_bins: (int) Number of bins
         :param use_standardizes_vals: (bool) Standardize values
-        :param kwargs: Additional arguments
-        :return: None
+        :param method: (str) One-point statistics. 'volume' for volume-weighted, 'mass' for mass-weighted,
+                'both' for both KDE
+        :param plot: (bool) Plot the KDE
+        :return: (dict) Dictionary containing x, y, z values and unit for plotting
         """
 
-        plt.style.use(['science', 'ieee', 'no-latex'])
+        print('****************************************************************************************')
+        print('****                       Starting Kernel Density Estimation                       ')
+        print('****  Parameters:                                                                   ')
+        print('****    - Bandwidths:', bandwidths, '                                               ')
+        print('****    - Number of bins:', n_bins, '                                               ')
+        print('****    - Use standardized values:', use_standardizes_vals, '                       ')
+        print('****    - Method:', method, '                                                       ')
+        print('****    - Plot:', plot, '                                                           ')
+        print('****    - Additional arguments:', kwargs, '                                         ')
+
+        if method is not None and method not in ['volume', 'mass', 'both']:
+            raise ValueError("One-point statistics must be either 'volume', 'mass' or 'both'")
+
+        if isinstance(bandwidths, float):
+            bandwidths = [bandwidths]
+
+        ra: np.ndarray | None = kwargs.get('ra', None)
+        de: np.ndarray | None = kwargs.get('de', None)
 
         # Check whether to use standardized values without dimension or not
-        if use_standardizes_vals:
-            self._standardize_coordinates()
+        if use_standardizes_vals and (ra is None or de is None):
 
-            ra = self._ra_standardized
-            de = self._de_standardized
+            if self._ra_standardized is None or self._de_standardized is None:
+                self._standardize_coordinates()
+
+            ra: np.ndarray | None = self._ra_standardized
+            de: np.ndarray | None = self._de_standardized
             unit = '-'
+        elif ra is None or de is None:
+            ra: np.ndarray | None = self.ra
+            de: np.ndarray | None = self.de
+            unit: str = 'deg'
         else:
-            ra = self.ra
-            de = self.de
-            unit = 'deg'
+            unit: str = '-'
 
         x_min, x_max = np.min(ra), np.max(ra)
         y_min, y_max = np.min(de), np.max(de)
 
         x, y = np.meshgrid(np.linspace(x_min, x_max, n_bins), np.linspace(y_min, y_max, n_bins))
 
-        rows: int = int(np.ceil(len(bandwidths) / 3))
-        cols: int = 3 if len(bandwidths) > 3 else len(bandwidths)
+        x_values, y_values, densities = [], [], []
+        for bw in bandwidths:
 
-        fig_height: float = rows * 5
-        fig_width: float = 18
-
-        fig, ax = plt.subplots(rows, cols, figsize=(fig_width, fig_height))
-
-        for i, bw in enumerate(bandwidths):
-            if len(bandwidths) > 3:
-                current_ax = ax[i // 3, i % 3]
-            elif len(bandwidths) > 1:
-                current_ax = ax[i]
-            else:
-                current_ax = ax
+            print('****  Process Bandwidth:', bw, '                                                      ')
 
             kde = KernelDensity(kernel='gaussian', bandwidth=bw)
             kde.fit(np.vstack([ra, de]).T)
 
-            z = np.exp(kde.score_samples(np.vstack([x.ravel(), y.ravel()]).T))
-            z = z.reshape(x.shape)
+            if method == 'volume':
+                dens = np.exp(kde.score_samples(np.vstack([x.ravel(), y.ravel()]).T))
+                dens = dens.reshape(x.shape)
+                x_values.append(x)
+                y_values.append(y)
+            elif method == 'mass':
+                dens = np.exp(kde.score_samples(np.vstack([ra, de]).T))
+                x_values.append(ra)
+                y_values.append(de)
+            else:
+                x_y = np.exp(kde.score_samples(np.vstack([x.ravel(), y.ravel()]).T))
+                ra_dec = np.exp(kde.score_samples(np.vstack([ra, de]).T))
+                dens = [np.array(x_y.reshape(x.shape)), np.array(ra_dec)]
+                x_values.append([x, ra])
+                y_values.append([y, de])
 
-            contour = current_ax.contourf(x, y, z, cmap='viridis')
-            current_ax.set_title(f'Bandwidth = {bw}', fontsize=18)
-            current_ax.set_xlabel(f'RA [{unit}]', fontsize=12)
-            current_ax.set_ylabel(f'DEC [{unit}]', fontsize=12)
+            densities.append(dens)
 
-            cbar = fig.colorbar(contour, ax=current_ax)
-            cbar.set_label('Density', fontsize=12)
+            print(f'****  Kernel Density Estimation Results for Bandwidth = {bw}:                                          ')
+            print('****    - Mean:', np.mean(dens), '                                           ')
+            print('****    - Std:', np.std(dens), '                                            ')
+            print('****    - Min:', np.min(dens), '                                            ')
+            print('****    - Max:', np.max(dens), '                                            ')
+            print('****    - Median:', np.median(dens), '                                      ')
+            print('****************************************************************************************')
 
-        process_plot(plt, kwargs.get('save_path', None))
+        results = {'x': x_values, 'y': y_values, 'densities': densities, 'unit': unit,
+                   'bandwidths': bandwidths}
+
+
+        if plot:
+            _plot_kde(results, method=str(method), **kwargs)
+
+        return results
+
+    def kolmogorov_smirnoff(self,
+                            use_standardized_vals: bool = True,
+                            n_slices: int = 50,
+                            **kwargs) -> tuple[ndarray[Any, dtype[Any]], ndarray[Any, dtype[Any]]]:
+        """
+
+
+        :return:
+        """
+
+        plt.style.use(['science', 'ieee', 'no-latex'])
+
+        n_bins: int = kwargs.get('n_bins', 50)
+        bw: float = kwargs.get('bandwidths', 0.5)
+        method: str = kwargs.get('method', 'mass')
+
+        if use_standardized_vals:
+            self._standardize_coordinates()
+
+            ra_red = self._ra_standardized[self.red_idx]
+            de_red = self._de_standardized[self.red_idx]
+
+            ra_blue = self._ra_standardized[self.blue_idx]
+            de_blue = self._de_standardized[self.blue_idx]
+
+        else:
+            ra_red = self.ra[self.red_idx]
+            de_red = self.de[self.red_idx]
+
+            ra_blue = self.ra[self.blue_idx]
+            de_blue = self.de[self.blue_idx]
+
+        red_slices: list[np.ndarray] = np.array_split(np.vstack([ra_red, de_red]).T, n_slices)
+        blue_slices: list[np.ndarray] = np.array_split(np.vstack([ra_blue, de_blue]).T, n_slices)
+
+        red_results = []
+        blue_results = []
+
+        for red_slice, blue_slice in zip(red_slices, blue_slices):
+            results_red = self.compute_kde(bandwidths=bw,
+                                           ra=red_slice[:, 0],
+                                           de=red_slice[:, 1],
+                                           method=method,
+                                           n_bins=n_bins,
+                                           plot=False)
+
+            results_blue = self.compute_kde(bandwidths=bw,
+                                            ra=blue_slice[:, 0],
+                                            de=blue_slice[:, 1],
+                                            method=method,
+                                            n_bins=n_bins,
+                                            plot=False)
+
+            red_results.append(results_red)
+            blue_results.append(results_blue)
+
+        if method == 'mass':
+            red_densities = np.concatenate([res['densities'].ravel() for res in red_results])
+            blue_densities = np.concatenate([res['densities'].ravel() for res in blue_results])
+        else:
+            red_densities = np.array([np.array(res['densities'][0]).ravel() for res in red_results]).ravel()
+            blue_densities = np.array([np.array(res['densities'][0]).ravel() for res in blue_results]).ravel()
+
+        _evaluate_kde(red_densities, blue_densities, **kwargs)
+
+        return red_densities, blue_densities
 
     def plot_2d_histograms(self, bins: float | list | np.ndarray | None = None, **kwargs) -> None:
         """
@@ -563,12 +938,12 @@ class SDSS:
             else:
                 current_ax = plots.axes
 
-            current_ax.set_title(f'2D Histogram for binwidth = {bw}', fontsize=18)
+            current_ax.set_title(f'Binwidth = {bw}', fontsize=12)
             hist = current_ax.hist2d(self.ra, self.de, bins=bw, cmap='plasma', alpha=0.8, vmin=0, vmax=20)
             current_ax.set_xlabel('RA [deg]', fontsize=12)
             current_ax.set_ylabel('DEC [deg]', fontsize=12)
 
-        cbar_size = 14 / plots.height if plots.height > 5 else 5
+        cbar_size = 8.5 / plots.height if plots.height > 3 else 3
         cbar = plt.colorbar(hist[3], ax=plots.axes, shrink=cbar_size)
         cbar.set_label('Density', fontsize=12)
 
@@ -698,5 +1073,4 @@ class SDSS:
 
 
 if __name__ == "__main__":
-
     pass
