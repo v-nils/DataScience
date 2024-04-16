@@ -9,7 +9,7 @@ from src.data_models import SDSS, compute_percentiles
 ########################################
 
 # Here we define the tasks that we want to run
-tasks = ['5']
+tasks = ['3']
 
 # Load SDSS as class
 sdss = SDSS(pd.read_csv('../data/raw_data/sdss_cutout.csv'))
@@ -78,7 +78,7 @@ if '2.5' in tasks:
 
 if '3' in tasks:
     save_path_kde_std: str = '../data/results/ex_02/kde_one_point_stats/kde_vol_with_stats_std.png'
-    kernel_bins_standardized: np.ndarray = np.array([0.001, 0.002, 0.005])
+    kernel_bins_standardized: np.ndarray = np.array([0.001, 0.01, 0.05])
 
     sdss.compute_kde(kernel_bins_standardized,
                      n_bins=50,
@@ -96,7 +96,7 @@ if '3' in tasks:
 if '4' in tasks:
     save_path_ks = '../data/results/ex_02/ks/ks.png'
 
-    sdss.kolmogorov_smirnoff(n_bins=22, bandwidths=0.005,  n_slices=4, method='mass', use_standardized_vals=True,
+    sdss.kolmogorov_smirnoff(n_bins=22, bandwidths=0.005,  n_slices=12, method='mass', use_standardized_vals=True,
                              save_path=save_path_ks, kde_per_subplot=3)
 
 
