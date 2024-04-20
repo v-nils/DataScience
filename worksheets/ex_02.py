@@ -1,15 +1,13 @@
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import scipy.special as sp
-from src.data_models import SDSS, compute_percentiles
+from src.data_models.sdss import SDSS, compute_percentiles
 
 ########################################
 # GLOBAL VARIABLES
 ########################################
 
 # Here we define the tasks that we want to run
-tasks = ['5']
+tasks = ['3']
 
 # Load SDSS as class
 sdss = SDSS(pd.read_csv('../data/raw_data/sdss_cutout.csv'))
@@ -48,8 +46,8 @@ if '2.2' in tasks:
     kernel_bins: np.ndarray = np.array([0.01, 0.05, 0.1])
     kernel_bins_standardized: np.ndarray = np.array([0.001, 0.005, 0.01])
 
-    sdss.compute_kde(kernel_bins, use_standardizes_vals=False, method='both', save_path=save_path_kde)
-    sdss.compute_kde(kernel_bins_standardized, use_standardizes_vals=True, method='both', save_path=save_path_kde_std)
+    sdss.compute_kde(kernel_bins, use_standardizes_vals=False, method='both', save_path=save_path_kde, plot_one_point_stats=False)
+    sdss.compute_kde(kernel_bins_standardized, use_standardizes_vals=True, method='both', save_path=save_path_kde_std, plot_one_point_stats=False)
 
 if '2.3' in tasks:
     save_path_nn: str = '../data/results/ex_02/nn/nn.png'
@@ -57,7 +55,7 @@ if '2.3' in tasks:
 
     n_neighbors = np.array([5, 10, 20])
 
-    sdss.nearest_neighbor_estimation(n_neighbors, use_standardizes_vals=True, save_path=save_path_nn)
+    sdss.nearest_neighbor_estimation(n_neighbors, use_standardizes_vals=True, save_path=save_path_nn_std)
 
 if '2.4' in tasks:
     save_path_voronoi_f: str = '../data/results/ex_02/voronoi/voronoi_filled.png'
@@ -78,7 +76,7 @@ if '2.5' in tasks:
 
 if '3' in tasks:
     save_path_kde_std: str = '../data/results/ex_02/kde_one_point_stats/kde_vol_with_stats_std.png'
-    kernel_bins_standardized: np.ndarray = np.array([0.001, 0.002, 0.005])
+    kernel_bins_standardized: np.ndarray = np.array([0.001, 0.005, 0.01])
 
     sdss.compute_kde(kernel_bins_standardized,
                      n_bins=50,

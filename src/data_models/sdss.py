@@ -214,9 +214,9 @@ def _plot_kde(kde_results: dict,
             current_ax = fig.add_subplot(inner_plot[0])
 
             if method == 'mass':
-                contour = current_ax.contourf(kde_results['x'][i], kde_results['y'][i], z, cmap='viridis')
+                contour = current_ax.contourf(kde_results['x'][i], kde_results['y'][i], z, cmap='magma')
             else:
-                contour = current_ax.scatter(kde_results['x'][i], kde_results['y'][i], c=z, cmap='viridis', s=0.5,alpha=0.5)
+                contour = current_ax.scatter(kde_results['x'][i], kde_results['y'][i], c=z, cmap='magma', s=0.5,alpha=0.5)
 
             current_ax.set_title(f'Bandwidth = {kde_results["bandwidths"][i]}', fontsize=12)
             current_ax.set_xlabel(f'RA [{kde_results["unit"]}]', fontsize=12)
@@ -828,17 +828,7 @@ class SDSS:
 
             densities.append(dens)
 
-            print(f'****  Kernel Density Estimation Results for Bandwidth = {bw}:                                          ')
-            print('****    - Mean:', np.mean(dens), '                                           ')
-            print('****    - Std:', np.std(dens), '                                            ')
-            print('****    - Min:', np.min(dens), '                                            ')
-            print('****    - Max:', np.max(dens), '                                            ')
-            print('****    - Median:', np.median(dens), '                                      ')
-            print('****************************************************************************************')
-
-        results = {'x': x_values, 'y': y_values, 'densities': densities, 'unit': unit,
-                   'bandwidths': bandwidths}
-
+        results = {'x': x_values, 'y': y_values, 'densities': densities, 'unit': unit, 'bandwidths': bandwidths}
 
         if plot:
             _plot_kde(results, method=str(method), **kwargs)
