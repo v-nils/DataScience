@@ -41,6 +41,8 @@ def landy_szalay(dd: np.array, dr: np.array, rr: np.array, n: int) -> np.array:
 
     return correlation_fun
 
+def average_galaxy_bands(bands: np.array) -> np.array:
 
+    return np.mean(bands, axis=-1)
 
 

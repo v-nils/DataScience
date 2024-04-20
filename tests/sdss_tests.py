@@ -1,7 +1,7 @@
 import unittest
 import pandas as pd
 import numpy as np
-from src.data_models import SDSS
+from src.data_models.sdss import SDSS
 
 
 class TestSDSS(unittest.TestCase):
