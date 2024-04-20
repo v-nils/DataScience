@@ -1,8 +1,5 @@
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import scipy.special as sp
-from src.data_models import SDSS
+from src.data_models.sdss import SDSS
 
 
 ########################################
