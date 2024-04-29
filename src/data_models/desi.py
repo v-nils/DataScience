@@ -181,9 +181,6 @@ class Galaxy:
             ax[i].imshow(approx, cmap='gray_r')
             ax[i].set_title("r = " + str(r), fontsize=12)
             ax[i].axis('off')
-            #ax[i][1].set_title("Original Image", fontsize=21)
-            #ax[i][1].imshow(data, cmap='gray_r')
-            #ax[i, 1].axis('off')
             i += 1
             svds.append(approx)
 
@@ -277,29 +274,31 @@ class DESI:
         svds = []
         flattened_galaxies = []
 
+        # Flatten all galaxies, compute and subtract the mean of each galaxy.
         for galaxy in self.galaxies:
-            flattened_data = galaxy.data.to_numpy().flatten()
+            flattened_data = galaxy.data.sel(bands='avg').to_numpy().ravel()
             mean_data = np.mean(flattened_data)
             flattened_data = flattened_data - mean_data
             flattened_galaxies.append(flattened_data)
 
         flattened_galaxies = np.array(flattened_galaxies)
 
-        for i in flattened_galaxies:
-            print(np.min(i), np.max(i))
-
         image_size = int(np.sqrt(flattened_galaxies.shape[1]))
         number_of_images = flattened_galaxies.shape[0]
         number_of_ranks = len(ranks)
+
+        # Compute the SVD for the flattened galaxies.
         U, S, V = np.linalg.svd(flattened_galaxies, full_matrices=False)
         S: np.array = np.diag(S)
+
+        print("SVD computed with shape: ", U.shape, S.shape, V.shape)
 
         hard_threshold = kwargs.get('hard_threshold', False)
 
         if hard_threshold:
             ht: float = 2.858 * np.median(S.diagonal())
 
-            S_ht = np.where(S > ht, S, 0)
+            S_ht = np.where(S > ht, S, 0)  # Singular values above the hard threshold
             approx_ht = U @ S_ht @ V
             fig, ax = plt.subplots(1, 1, figsize=(8, 4))
             ax.imshow(approx_ht, cmap='gray_r')
@@ -332,10 +331,7 @@ class DESI:
         fig, ax = plt.subplots(len(ranks), 1, figsize=(11,5))
 
         for i, r in enumerate(ranks):
-            print(U.shape, S.shape, V.shape)
-            S_rank = copy.deepcopy(S)
-            S_rank[r:, r:] = 0
-            approx = U @ S_rank @ V
+            approx = U[:, r-1:r] @ S[r-1:r, r-1:r] @ V[r-1:r, :]
             ax[i].imshow(approx, cmap='gray_r')
             ax[i].set_title("r = " + str(r), fontsize=12)
             ax[i].axis('off')
@@ -379,37 +375,21 @@ class DESI:
             else:
                 save_path_mean = None
 
-            fig, ax = plt.subplots(1, number_of_ranks, figsize=(8, 4))
+            fig, ax = plt.subplots(1, number_of_ranks, figsize=(14, 3))
 
-            galaxies_mean = np.mean(flattened_galaxies, axis=0).reshape(image_size, image_size)
+            for j, i in enumerate(ranks):
 
-            U, S, V = np.linalg.svd(galaxies_mean, full_matrices=False)
-            S = np.diag(S)
-            print(U.shape, S.shape, V.shape)
+                svd_rank = np.mean(svds[j].reshape(number_of_images, image_size, image_size), axis=0)
+                print("Stats: ", svd_rank.min(), svd_rank.max(), svd_rank.mean(), svd_rank.std())
+                ax[j].imshow(svd_rank, cmap='magma')
+                ax[j].set_title(f'r = {i}', fontsize=12)
+                ax[j].axis('off')
 
-            for i in range(number_of_ranks):
-
-                S_rank = copy.deepcopy(S)
-                S_rank[ranks[i]:, ranks[i]:] = 0
-                sdvs_mean = U @ S_rank @ V
-                sdvs_mean = np.zeros((image_size, image_size))
-                for j in range(i):
-                    sdvs_mean += S[j, j] * np.outer(U[:, j], V[j, :])
-
-                #sdvs_mean = np.mean(svds[i], axis=0).reshape(image_size, image_size)
-
-
-                cax = ax[i]
-                im = cax.imshow(sdvs_mean, cmap='magma_r', norm='log', vmin=-100, vmax=250)
-                cax.axis('off')
-
-            cbar = fig.colorbar(im, ax=ax[:], shrink=0.6)
+            cbar = fig.colorbar(im, ax=ax, shrink=0.6)
             cbar.set_label(r'$\sigma^r$', fontsize=8)
 
             process_plot(plt, save_path=save_path_mean)
         return svds
-
-
 
     def average_all_galaxies(self, **kwargs):
         """
