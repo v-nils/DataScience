@@ -21,12 +21,12 @@ if 1 in task:
 
     desi_copy = copy.deepcopy(desi_main)
 
-    galaxy_list = [0, 17, 23, 25, 86, 99, 105, 200]
+    galaxy_list = [0, 17, 25, 99, 200]
 
 
     desi_copy.remove_by_index(galaxy_list, inverse=True)
     # Galaxies of interest
-    p_vals = [1, 2, 4, 8, 16, 32]
+    p_vals = [2, 4, 8, 16, 32]
     # Compute the average of all the galaxies
     desi_copy.average_all_galaxies(overwrite=False)
 
@@ -61,7 +61,7 @@ if 3 in task:
 
     galaxy.average_bands(overwrite=True)
 
-    svds = galaxy.singular_value_decomposition(ranks=[128, 64, 32, 16, 8, 4, 2],
+    svds = galaxy.singular_value_decomposition(ranks=[2, 4, 8, 16, 32, 64, 128],
                                                save_path='../data/results/ex_03/galaxy_svd/galaxy_svd_2.png',
                                                plot_magnitude=True,
                                                hard_threshold=True)
@@ -78,4 +78,13 @@ if 4 in task:
     all_galaxies.average_all_galaxies(overwrite=True)
 
     all_galaxies.sample_all_galaxies(4)
+    svds= (
+        all_galaxies.svd_all_galaxies(ranks=[1, 2, 3, 4],
+                                  save_path='../data/results/ex_03/all_galaxies_svd/all_galaxies_svd_2.png',
+                                  plot_magnitude=True,
+                                  hard_threshold=True,
+                                  plot_samples=True))
+
+
+
 

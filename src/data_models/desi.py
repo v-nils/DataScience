@@ -1,3 +1,4 @@
+import copy
 from typing import List, Any
 
 import numpy as np
@@ -93,6 +94,7 @@ class Galaxy:
                 c[detail_level + 1] = [d / np.abs(d).max() for d in c[detail_level + 1]]
 
             cA = c[0]
+            print(len(cA))
             cH, cV, cD = c[1][:]
             re_image = pywt.waverec2(c, 'db2', mode='smooth')
 
@@ -172,16 +174,16 @@ class Galaxy:
                 magnitude_save_path = '..' + save_path.split('.')[-2] + '_magnitude.png'
                 process_plot(plt, save_path=magnitude_save_path)
 
-        fig, ax = plt.subplots(len(ranks), 2, figsize=(8, len(ranks)*4))
+        fig, ax = plt.subplots(1, len(ranks), figsize=(8, len(ranks)*6))
 
         for i, r in enumerate(ranks):
             approx = U[:, :r] @ S[:r, :r] @ V[:r, :]
-            ax[i][0].imshow(approx, cmap='gray_r')
-            ax[i][0].set_title("r = " + str(r), fontsize=21)
-            ax[i, 0].axis('off')
-            ax[i][1].set_title("Original Image", fontsize=21)
-            ax[i][1].imshow(data, cmap='gray_r')
-            ax[i, 1].axis('off')
+            ax[i].imshow(approx, cmap='gray_r')
+            ax[i].set_title("r = " + str(r), fontsize=12)
+            ax[i].axis('off')
+            #ax[i][1].set_title("Original Image", fontsize=21)
+            #ax[i][1].imshow(data, cmap='gray_r')
+            #ax[i, 1].axis('off')
             i += 1
             svds.append(approx)
 
@@ -261,6 +263,154 @@ class DESI:
         for galaxy in self.galaxies:
             galaxy.downsample(p, **kwargs)
 
+    def svd_all_galaxies(self, ranks: list[int], **kwargs):
+        """
+        Compute the singular value decomposition for all the galaxies in the dataset.
+        :param ranks: The ranks for the SVD.
+        :return:
+        """
+
+        plt.style.use(['science', 'ieee'])
+
+        save_path = kwargs.get('save_path', None)
+
+        svds = []
+        flattened_galaxies = []
+
+        for galaxy in self.galaxies:
+            flattened_data = galaxy.data.to_numpy().flatten()
+            mean_data = np.mean(flattened_data)
+            flattened_data = flattened_data - mean_data
+            flattened_galaxies.append(flattened_data)
+
+        flattened_galaxies = np.array(flattened_galaxies)
+
+        for i in flattened_galaxies:
+            print(np.min(i), np.max(i))
+
+        image_size = int(np.sqrt(flattened_galaxies.shape[1]))
+        number_of_images = flattened_galaxies.shape[0]
+        number_of_ranks = len(ranks)
+        U, S, V = np.linalg.svd(flattened_galaxies, full_matrices=False)
+        S: np.array = np.diag(S)
+
+        hard_threshold = kwargs.get('hard_threshold', False)
+
+        if hard_threshold:
+            ht: float = 2.858 * np.median(S.diagonal())
+
+            S_ht = np.where(S > ht, S, 0)
+            approx_ht = U @ S_ht @ V
+            fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+            ax.imshow(approx_ht, cmap='gray_r')
+            ax.set_title("Hard Thresholding", fontsize=12)
+            ax.axis('off')
+
+            if save_path is not None:
+                ht_save_path = '..' + save_path.split('.')[-2] + '_ht.png'
+                process_plot(plt, save_path=ht_save_path)
+
+        if kwargs.get('plot_magnitude', False):
+            fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+            magnitudes = S.diagonal()
+            ax.plot(np.linspace(0, len(magnitudes), len(magnitudes)), magnitudes)
+            ax.set_yscale('log')
+            ax.set_xscale('log')
+            ax.set_ylabel(r'$\sigma_r$', fontsize=12)
+            ax.set_xlabel(r'RANK $r$', fontsize=12)
+
+            if hard_threshold:
+                fraction_of_svd_above_ht = np.sum(S.diagonal() > ht) / len(S.diagonal())
+                ax.axhline(y=ht, linestyle='--', label=f'Hard Threshold at {ht:.2f}')
+                ax.legend()
+                ax.set_title(f'Percentage of SVD above HT: {fraction_of_svd_above_ht * 100:.2f} percent', fontsize=14)
+
+            if save_path is not None:
+                magnitude_save_path = '..' + save_path.split('.')[-2] + '_magnitude.png'
+                process_plot(plt, save_path=magnitude_save_path)
+
+        fig, ax = plt.subplots(len(ranks), 1, figsize=(11,5))
+
+        for i, r in enumerate(ranks):
+            print(U.shape, S.shape, V.shape)
+            S_rank = copy.deepcopy(S)
+            S_rank[r:, r:] = 0
+            approx = U @ S_rank @ V
+            ax[i].imshow(approx, cmap='gray_r')
+            ax[i].set_title("r = " + str(r), fontsize=12)
+            ax[i].axis('off')
+            i += 1
+            svds.append(approx)
+
+        plt.tight_layout()
+
+        process_plot(plt, save_path=save_path)
+
+        plot_samples = kwargs.get('plot_samples', None)
+        if plot_samples is not None:
+
+            if save_path is not None:
+                save_path_samples = '..' + save_path.split('.')[-2] + '_samples.png'
+            else:
+                save_path_samples = None
+
+            fig, ax = plt.subplots(4, number_of_ranks + 1, figsize=(19, 12))
+            for i in range(number_of_ranks):
+                current_svd = svds[i].reshape(number_of_images, image_size, image_size)
+                ax[i, 0].imshow(self.galaxies[i].data.to_numpy(), cmap='magma')
+                ax[0, 0].set_title('Original Image', fontsize=16)
+                ax[0, i + 1].set_title(f'r = {ranks[i]}', fontsize=16)
+                ax[i, 0].axis('off')
+                for j_idx, j in enumerate([1, 10, 100, 200]):
+                    cax = ax[j_idx, i+1]
+                    im = cax.imshow(current_svd[j], cmap='magma')
+                    cax.axis('off')
+
+                if i == number_of_ranks - 1:
+                    cbar = fig.colorbar(im, ax=ax[:, :], shrink=0.6)
+                    cbar.set_label(r'$\sigma^r$', fontsize=16)
+                    cbar.ax.tick_params(direction='out', which='major', length=10, width=2.3)
+                    cbar.ax.tick_params(direction='out', which='minor', length=4, width=1.3)
+
+            process_plot(plt, save_path=save_path_samples)
+
+            if save_path is not None:
+                save_path_mean: str = '..' + save_path.split('.')[-2] + '_mean.png'
+            else:
+                save_path_mean = None
+
+            fig, ax = plt.subplots(1, number_of_ranks, figsize=(8, 4))
+
+            galaxies_mean = np.mean(flattened_galaxies, axis=0).reshape(image_size, image_size)
+
+            U, S, V = np.linalg.svd(galaxies_mean, full_matrices=False)
+            S = np.diag(S)
+            print(U.shape, S.shape, V.shape)
+
+            for i in range(number_of_ranks):
+
+                S_rank = copy.deepcopy(S)
+                S_rank[ranks[i]:, ranks[i]:] = 0
+                sdvs_mean = U @ S_rank @ V
+                sdvs_mean = np.zeros((image_size, image_size))
+                for j in range(i):
+                    sdvs_mean += S[j, j] * np.outer(U[:, j], V[j, :])
+
+                #sdvs_mean = np.mean(svds[i], axis=0).reshape(image_size, image_size)
+
+
+                cax = ax[i]
+                im = cax.imshow(sdvs_mean, cmap='magma_r', norm='log', vmin=-100, vmax=250)
+                cax.axis('off')
+
+            cbar = fig.colorbar(im, ax=ax[:], shrink=0.6)
+            cbar.set_label(r'$\sigma^r$', fontsize=8)
+
+            process_plot(plt, save_path=save_path_mean)
+        return svds
+
+
+
     def average_all_galaxies(self, **kwargs):
         """
         Average the bands of all the galaxies in the dataset.
@@ -330,12 +480,14 @@ class DESI:
 
             for i, galaxy in enumerate(self.galaxies):
                 for j, p in enumerate(p_values):
+                    if i == 0:
+                        ax[i, j].set_title(f'p = {p}', fontsize=21)
                     ax[i, j].imshow(down_samples[j][i].data.sel(bands='avg'), cmap='gray')
                     ax[i, j].axis('off')
 
         process_plot(plt, save_path=save_path)
 
-    def plot_images(self, index: None | list, bands: list[list[str]] = None, save_path=None):
+    def plot_images(self, index: None | list = None, bands: list[list[str]] = None, save_path=None):
         """
         Plot the images of the galaxies in the dataset.
         :param index: Galaxy indices to plot.
@@ -344,6 +496,7 @@ class DESI:
         :return:
         """
 
+        plt.style.use(['science', 'ieee'])
         if index is None:
             index = range(len(self.galaxies))
 
@@ -369,11 +522,11 @@ class DESI:
             ax[i, 3].axis('off')
             ax[i, 4].axis('off')
 
-        ax[0, 0].set_title('Combined Bands (RGB)')
-        ax[0, 1].set_title('Red Band')
-        ax[0, 2].set_title('Green Band')
-        ax[0, 3].set_title('Blue Band')
-        ax[0, 4].set_title('Average Bands')
+        ax[0, 0].set_title('Combined Bands (RGB)', fontsize=21)
+        ax[0, 1].set_title('Green Band', fontsize=21)
+        ax[0, 2].set_title('Red Band', fontsize=21)
+        ax[0, 3].set_title('Blue Band', fontsize=21)
+        ax[0, 4].set_title('Averaged Bands', fontsize=21)
 
         plt.subplots_adjust(hspace=0.05, wspace=0.05)
         process_plot(plt, save_path=save_path)
