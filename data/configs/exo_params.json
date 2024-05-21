@@ -1,0 +1,35 @@
+{
+  "1" : {
+    "activation": "relu",
+    "units": [20, 10, 1],
+    "loss": "mean_squared_error",
+    "optimizer": "adam",
+    "epochs": 100,
+    "batch_size": 32,
+    "validation_split": 0.2,
+    "shuffle": true,
+    "learning_rate": 0.001
+  },
+  "2" : {
+      "activation": "relu",
+      "units": [20, 5, 1],
+      "loss": "mean_squared_error",
+      "optimizer": "adam",
+      "epochs": 100,
+      "batch_size": 32,
+      "validation_split": 0.2,
+      "shuffle": true,
+      "learning_rate": 0.001
+  },
+  "3" : {
+      "activation": "relu",
+      "units": [20, 10, 1],
+      "loss": "mean_squared_error",
+      "optimizer": "adam",
+      "epochs": 100,
+      "batch_size": 32,
+      "validation_split": 0.2,
+      "shuffle": true,
+      "learning_rate": 0.001
+  },
+}
