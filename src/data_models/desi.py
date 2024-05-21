@@ -18,12 +18,16 @@ data_path = '../../data/raw_data/DECals_galaxies.hdf5'
 
 
 class Galaxy:
+    """
+    A class which holds the data for a single galaxy from the DESI Model.
+    """
 
-    def __init__(self, data: np.array, bands: None | list = None):
+    def __init__(self, data: np.array, bands: None | list = None) -> None:
         """
         Initialize the Galaxy object with the image data and the bands.
         :param data: The image data.
         :param bands: Bands of the image data.
+        :return: None
         """
 
         self.wavelet_data = None
@@ -42,14 +46,14 @@ class Galaxy:
         kwargs: dict: Additional arguments.
             overwrite: bool: If True, the data is initialized and overwritten by the new band. If False, the averaged band
             is appended to the data.
-        :return: The averaged bands.
+        :return: None.
         """
 
         if isinstance(new_band, str):
-            new_band = [new_band]
-        overwrite = kwargs.get('overwrite', False)
+            new_band: list = [new_band]
+        overwrite: str | bool = kwargs.get('overwrite', False)
 
-        avg_band = self.data.mean(dim='bands')
+        avg_band: xr.DataArray = self.data.mean(dim='bands')
         avg_band = avg_band.expand_dims({'bands': new_band})
         avg_band = avg_band.transpose('x', 'y', 'bands')
         if overwrite:
@@ -514,13 +518,3 @@ class DESI:
 
 
 
-
-
-if __name__ == '__main__':
-    desi = DESI(data_path)
-    desi.average_all_galaxies()
-
-    desi.plot_images([0, 10, 20])
-    current_gala = desi.galaxies[0]
-
-    desi.sample_all_galaxies(2)
