@@ -10,6 +10,7 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
 import scienceplots
 from imblearn.over_sampling import SMOTE
+from sklearn.metrics import precision_score, recall_score, accuracy_score, f1_score
 
 
 # Global variables
@@ -22,6 +23,10 @@ plt.style.use(['science', 'ieee'])
 class ExoplanetModel:
 
     def __init__(self):
+        self.f_score = None
+        self.accuracy = None
+        self.recall = None
+        self.precision = None
         self.loss = None
         self.acc = None
         self.model = None
@@ -84,7 +89,6 @@ class ExoplanetModel:
 
         # Standardize the data
         standard_scaler = StandardScaler()  # Select the scaling method
-
 
         # Standardize training and test data
         # Only standardize the features, not the labels
@@ -157,14 +161,14 @@ class ExoplanetModel:
 
         model = tf.keras.models.Sequential([
             Flatten(),
-            Dense(units[0], activation=activation[0], name='hidden_layer', kernel_initializer='he_normal'),
+            Dense(units[0], activation=activation[0], name='hidden_layer'),
             Dense(units[1], activation=activation[1], name='output_layer', kernel_initializer='he_normal'),
             Dense(1, activation='sigmoid')
         ])
 
         self.model = model
 
-    def train_model(self, optimizer: str = 'adam', learning_rate: float = 0.05) -> None:
+    def train_model(self, optimizer: str = 'adam', learning_rate: float = 0.05, epochs=50) -> None:
 
         if optimizer == 'adam':
             optimizer_instance = tf.keras.optimizers.Adam(learning_rate=learning_rate)
@@ -179,21 +183,25 @@ class ExoplanetModel:
                            loss='binary_crossentropy',
                            metrics=['accuracy'])
 
-        self.model.fit(self.model_train.iloc[:, :-1],
+        summary = self.model.fit(self.model_train.iloc[:, :-1],
                        self.model_train['label'],
-                       epochs=50,
+                       epochs=epochs,
                        batch_size=64,
                        shuffle=True,
                        validation_split=0.3)
 
         # Print the model summary
-        self.model.summary()
+        #self.model.summary()
+        self.loss = summary.history['loss']
 
     def evaluate_model(self) -> None:
-        self.loss, self.acc = self.model.evaluate(self.model_test.iloc[:, :-1], self.model_test['label'], verbose=2)
+        y_true = self.model_test['label']
+        y_pred = (self.model.predict(self.model_test.iloc[:, :-1]) > 0.5).astype("int32")
 
-        print('Loss:', self.loss)
-        print('Accuracy:', self.acc)
+        self.precision = precision_score(y_true, y_pred)
+        self.recall = recall_score(y_true, y_pred)
+        self.accuracy = accuracy_score(y_true, y_pred)
+        self.f_score = f1_score(y_true, y_pred)
 
     def compute_stats(self, which: str = 'train'):
 
@@ -219,9 +227,26 @@ class ExoplanetModel:
         plt.title('Confusion Matrix')
         plt.show()
 
+def plot_fluxes(data: pd.DataFrame):
+
+    avg_data = data.groupby('LABEL').mean()
+
+    fig, ax = plt.subplots(2, 1)
+    ax[0].scatter(np.linspace(0, len(avg_data.loc[1])), avg_data.loc[1])
+    ax[0].set_title('No Exoplanet')
+    ax[1].scatter(avg_data.loc[2])
+    ax[1].set_title('Exoplanet')
+    plt.show()
+
+
+
 
 if __name__ == '__main__':
 
+    data = pd.read_csv('../../data/raw_data/exoTrain.csv')
+    plot_fluxes(data)
+
+    """
     # Set to True to re-preprocess the data
     pre_process = False
 
@@ -247,14 +272,26 @@ if __name__ == '__main__':
         Exo.read_train_data('../../data/processed_data/exoTrain_std_pca.csv')
         Exo.read_test_data('../../data/processed_data/exoTest_std_pca.csv')
 
-    print(Exo.model_train.head())
+    Exo.plot_correlations()
+    
 
     params = {
         'units': [[i, 1] for i in range(1, 50, 1)],
         'activation': [['relu', 'sigmoid'], ['relu', 'relu'], ['tanh', 'sigmoid'], ['tanh', 'tanh']]
     }
 
-    Exo.create_model(units=[50, 11], activation=['relu', 'relu'])
-    Exo.train_model()
+    Exo.create_model(units=[256, 128], activation=['relu', 'relu'])
+    Exo.train_model(epochs=25)
     Exo.evaluate_model()
-    Exo.plot_confusion_matrix()
+    #Exo.plot_confusion_matrix()
+
+    fig, ax = plt.subplots()
+    ax.plot(Exo.loss)
+    ax.set_xlabel('Epoch')
+    ax.set_ylabel('Loss')
+    plt.show()
+
+    print("F1 Score:", Exo.f_score)"""
+
+
+
